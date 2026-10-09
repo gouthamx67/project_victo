@@ -1,72 +1,68 @@
-# GenAR AI Engineering Challenge
-## Controlled AI System for Regulatory Safety Reporting
+# Regulatory Safety Reporting
 
-A prototype AI engineering system for controlled, evidence-backed regulatory
-safety reporting.
+Generate, review, and finalize safety reports from CSV data. Safety metrics are calculated deterministically; an LLM can optionally write the narrative. Reports stay drafts until human review is complete.
 
-The system demonstrates how deterministic safety-data analysis, constrained
-LLM narrative generation, grounding validation, human review, reproducibility,
-and evidence tracing can be combined without allowing an LLM to invent or
-calculate regulatory metrics.
+## Prerequisites
+Git, Python 3.11+, Node.js + npm.
 
----
+## Quick start
 
-## Project status
+```bash
+git clone <YOUR-REPOSITORY-URL>
+cd project_victo
+```
 
-**V0 PADER prototype:** implemented and tested.
+**Terminal 1: backend**
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python -m uvicorn src.api:app --reload --host 127.0.0.1 --port 8000
+```
+Check it works: http://127.0.0.1:8000/health
 
-**V1 PSUR-lite generalization:** implemented as a second configuration over
-the same reporting engine.
+**Terminal 2: frontend**
+```bash
+cd frontend
+npm install
+npm run dev
+```
+Open http://localhost:5173
 
-Current regression suite:
+## Generate a report
+1. Upload your CSV.
+2. Leave **Enable LLM narrative** off for your first run (no API key needed).
+3. Click **Generate report**.
+4. Review the evidence and complete human review before finalizing.
 
-**320 tests passing**
+## Optional: enable LLM narrative
+Get a key at https://console.groq.com/keys, then in the backend terminal, before starting uvicorn:
 
-The supplied exercise dataset is intentionally excluded from Git and final
-submission artifacts.
+```bash
+read -s -p "Groq API key: " GROQ_API_KEY; echo
+export GROQ_API_KEY LLM_PROVIDER=groq GROQ_MODEL=openai/gpt-oss-120b
+```
+(Zsh: use `read -s "GROQ_API_KEY?Groq API key: "`.)
 
----
+Never commit the key.
 
-# 1. Problem
+## API (optional)
+```bash
+curl -sS -X POST http://127.0.0.1:8000/runs \
+  -F 'file=@path/to/your.csv' \
+  -F 'use_llm=false'   # or true
+```
 
-Regulatory safety reports contain quantitative and categorical claims that
-must be reproducible and traceable to source safety cases.
+## Troubleshooting
+- **Backend won't start:** activate `.venv`, rerun `pip install -r requirements.txt` from the project root.
+- **Frontend won't start:** run `npm install` inside `frontend/`.
+- **Port in use:** stop the other process or change the port.
+- **Invalid API key:** set `GROQ_API_KEY` and `LLM_PROVIDER=groq` in the same terminal that starts the backend.
+- **LLM fails:** check the backend terminal for the error, plus model access and quota.
+- **CSV upload fails:** the file must match the project's expected format.
 
-A naive approach would send raw safety data to an LLM and ask it to:
+## Safety note
+Generated reports don't replace qualified review. Verify findings against source data and reporting requirements before finalizing.
 
-- calculate statistics;
-- identify trends;
-- summarize cases;
-- generate the report.
-
-That design creates unnecessary risks:
-
-- arithmetic errors;
-- inconsistent aggregation;
-- unsupported claims;
-- hallucinated numbers;
-- unclear evidence provenance;
-- weak reproducibility.
-
-This project instead separates deterministic computation from controlled
-language generation.
-
----
-
-# 2. Core design principle
-
-> **Python computes what is true from the supplied data. The LLM may only
-> interpret and phrase approved deterministic results.**
-
-The LLM does not receive the raw CSV.
-
-It receives a minimal, section-specific context containing approved
-`AnalysisResult` objects.
-
-Metric values are represented in generated narratives using exact metric
-slots such as:
-
-```text
-{case_count}
-{serious_case_percentage}
-{fatal_case_count}
+## License
+Add license information here.
