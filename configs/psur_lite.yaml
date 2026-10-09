@@ -1,0 +1,113 @@
+report:
+  id: psur-lite
+  title: Periodic Safety Update Report - Lite
+  version: "1.0.0"
+  product_name: "Bisoprolol"
+  application_identifier: "not supplied"
+  report_type: "Periodic Safety Update Report"
+  regulatory_basis:
+    jurisdiction: "Prototype"
+    reference: "PSUR-lite demonstration configuration only"
+  sections:
+    - id: reporting_period
+      title: Reporting Period
+      needs: [reporting_period]
+      ai: false
+      instructions: "State the observed reporting period using the deterministic metric. Do not infer an unobserved period."
+      style:
+        tone: neutral
+        length: short
+      order: 1
+
+    - id: narrative_summary_and_analysis
+      title: Narrative Summary and Analysis
+      needs:
+        - case_count
+        - serious_case_count
+        - serious_case_percentage
+        - expedited_case_count
+        - expedited_case_percentage
+        - fatal_case_count
+      ai: true
+      instructions: "Summarize case volume, seriousness, expedited reporting, and fatal outcomes using supplied metrics only. Do not infer causality, incidence, expectedness, or signal status."
+      style:
+        tone: neutral
+        length: short
+      order: 2
+
+    - id: summary_analysis_of_cases
+      title: Summary Analysis of Cases
+      needs:
+        - age_distribution
+        - sex_distribution
+        - country_distribution
+      ai: true
+      instructions: "Describe age, sex, and country/region distributions. Preserve unknown values. Country codes IE, RO, SA, HR, UA, and FI are normalized to country names; EU is represented as European Union (region). Do not infer missing demographics."
+      style:
+        tone: neutral
+        length: medium
+      order: 3
+
+    - id: reaction_adverse_event_analysis
+      title: Reaction/Adverse Event Analysis
+      needs:
+        - reaction_count
+        - unique_reaction_count
+        - top_reactions
+        - top_serious_reactions
+        - reaction_outcome_distribution
+      ai: true
+      instructions: "Describe reaction preferred terms, distinguishing reaction occurrences from distinct supporting cases. Include serious reactions where available. Do not infer causality, expectedness, or unavailable system organ class information."
+      style:
+        tone: neutral
+        length: medium
+      order: 4
+
+    - id: serious_cases_15_day_alerts
+      title: Serious and Expedited Cases
+      needs:
+        - serious_case_count
+        - serious_case_percentage
+        - expedited_case_count
+        - expedited_case_percentage
+        - fatal_case_count
+        - case_outcome_distribution
+      ai: true
+      instructions: "Summarize serious and expedited case counts, fatal outcomes, and case outcomes using supplied metrics only. Explicitly state that 15-day reporting deadlines, timeliness, and compliance cannot be assessed without case-level deadline and submission evidence. Do not infer alert status or lateness."
+      style:
+        tone: neutral
+        length: medium
+      order: 5
+
+    - id: trends_and_important_observations
+      title: Trends and Important Observations
+      needs:
+        - monthly_case_counts
+        - monthly_case_deviations
+        - monthly_top_reactions
+      ai: true
+      instructions: "Describe supplied monthly case counts, deviations, and reaction patterns. Explain partial boundary months and baseline eligibility when supported. State that the 1.5x deviation threshold is a descriptive heuristic for human review, not a validated safety-signal threshold; no flagged month does not establish absence of safety signals."
+      style:
+        tone: neutral
+        length: medium
+      order: 6
+
+    - id: history_of_actions
+      title: History of Actions
+      needs: [history_of_actions]
+      ai: false
+      instructions: "Use the deterministic history-of-actions result. If no history was supplied, state that none was provided. Do not infer actions."
+      style:
+        tone: neutral
+        length: short
+      order: 7
+
+    - id: case_index_listing
+      title: Case Index / Listing
+      needs: [case_listing]
+      ai: false
+      instructions: "Render a table with case ID, reactions, seriousness, receive date, country, and outcome. Represent missing values as not reported."
+      style:
+        tone: neutral
+        length: long
+      order: 8

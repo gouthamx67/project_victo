@@ -1,0 +1,138 @@
+report:
+  id: pader
+  title: Periodic Adverse Drug Experience Report
+  version: "1.0.0"
+
+  regulatory_basis:
+    jurisdiction: US
+    reference: "21 CFR 314.80(c)(2)"
+
+  sections:
+    - id: executive_summary
+      title: Executive Summary
+      order: 10
+      needs:
+        - case_count
+        - serious_case_count
+        - serious_case_percentage
+        - expedited_case_count
+        - expedited_case_percentage
+        - fatal_case_count
+        - monthly_case_deviations
+      ai: true
+      instructions: >
+        Summarize the reporting-period safety case volume and the
+        deterministic outcome and review metrics supplied in the context.
+        Do not introduce metrics, causal explanations, signal claims,
+        expectedness claims, or conclusions that are not directly supported
+        by the supplied evidence.
+      style:
+        tone: formal
+        length: concise
+
+    - id: case_volume
+      title: Case Volume
+      order: 20
+      needs:
+        - case_count
+        - monthly_case_counts
+      ai: true
+      instructions: >
+        Describe the number of unique safety cases received during the
+        reporting period and their monthly distribution. Use only supplied
+        deterministic metrics. Do not infer reasons for increases or
+        decreases.
+      style:
+        tone: formal
+        length: concise
+
+    - id: seriousness
+      title: Seriousness
+      order: 30
+      needs:
+        - serious_case_count
+        - serious_case_percentage
+      ai: true
+      instructions: >
+        Describe the deterministic serious-case count and percentage.
+        Do not infer clinical severity beyond the supplied seriousness
+        classification.
+      style:
+        tone: formal
+        length: concise
+
+    - id: expedited_cases
+      title: Expedited Cases
+      order: 40
+      needs:
+        - expedited_case_count
+        - expedited_case_percentage
+      ai: true
+      instructions: >
+        Describe the deterministic expedited-case count and percentage.
+        Do not infer regulatory significance beyond the supplied metric.
+      style:
+        tone: formal
+        length: concise
+
+    - id: reaction_profile
+      title: Reaction Profile
+      order: 50
+      needs:
+        - top_reactions
+        - unique_reaction_count
+        - reaction_outcome_distribution
+      ai: true
+      instructions: >
+        Describe the reported reaction profile using only the supplied
+        normalized reaction metrics. Do not infer causality, disproportionality,
+        clinical importance, or safety signals.
+      style:
+        tone: formal
+        length: moderate
+
+    - id: outcomes
+      title: Case Outcomes
+      order: 60
+      needs:
+        - case_outcome_distribution
+        - fatal_case_count
+        - not_recovered_case_count
+        - recovered_case_count
+      ai: true
+      instructions: >
+        Describe the deterministic case-level outcome distribution. Make
+        clear that these are data-derived outcome classifications. Do not
+        infer causality or clinical significance.
+      style:
+        tone: formal
+        length: moderate
+
+    - id: trend_review
+      title: Trend Review
+      order: 70
+      needs:
+        - monthly_case_counts
+        - monthly_case_deviations
+      ai: true
+      instructions: >
+        Describe observable monthly case-volume patterns and any deterministic
+        review flags supplied in the context. A review flag must not be
+        described as a safety signal. Do not infer causes for observed
+        changes.
+      style:
+        tone: formal
+        length: moderate
+
+    - id: case_listing
+      title: Case Listing
+      order: 80
+      needs:
+        - case_listing
+      ai: false
+      instructions: >
+        This section is generated deterministically from the normalized case
+        listing. No narrative generation is required.
+      style:
+        tone: formal
+        length: none

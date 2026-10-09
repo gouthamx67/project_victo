@@ -1,0 +1,5 @@
+pandas
+pydantic
+PyYAML
+jinja2
+pytest

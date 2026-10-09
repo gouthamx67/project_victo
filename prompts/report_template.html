@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>{{REPORT_TITLE}}</title>
+    <meta name="report-id" content="{{REPORT_ID}}">
+    <meta name="report-version" content="{{REPORT_VERSION}}">
+    <meta name="report-status" content="{{REPORT_STATUS}}">
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1000px;
+            margin: 40px auto;
+            padding: 0 24px;
+            line-height: 1.6;
+        }
+
+        header {
+            margin-bottom: 32px;
+        }
+
+        .report-meta {
+            color: #555;
+            font-size: 0.9rem;
+        }
+
+        .report-status {
+            margin-top: 16px;
+            padding: 12px 16px;
+            border-radius: 6px;
+            font-weight: bold;
+            border: 1px solid #999;
+        }
+
+        .report-status-draft {
+            background: #fff8e1;
+        }
+
+        .report-status-final {
+            background: #e8f5e9;
+        }
+
+        .report-section {
+            margin-bottom: 28px;
+        }
+
+        .report-section h2 {
+            margin-bottom: 8px;
+        }
+
+        .evidence-block {
+            margin-top: 18px;
+            padding: 14px 16px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            background: #fafafa;
+        }
+
+        .evidence-block h3 {
+            margin-top: 0;
+            font-size: 1rem;
+        }
+
+        .evidence-metric {
+            margin-bottom: 14px;
+        }
+
+        .evidence-metric:last-child {
+            margin-bottom: 0;
+        }
+
+        .evidence-metric ul {
+            margin-top: 4px;
+        }
+
+        code {
+            font-family: monospace;
+        }
+
+        .case-listing-table-wrapper {
+            max-width: 100%;
+            overflow-x: auto;
+            margin-top: 12px;
+        }
+
+        .case-listing-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+        }
+
+        .case-listing-table th,
+        .case-listing-table td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+            vertical-align: top;
+            overflow-wrap: anywhere;
+        }
+
+        .case-listing-table th {
+            background: #f2f2f2;
+        }
+
+        .case-listing-table tbody tr:nth-child(even) {
+            background: #fafafa;
+        }
+    </style>
+</head>
+
+<body>
+
+<header>
+    <h1>{{REPORT_TITLE}}</h1>
+
+    <div class="report-meta">
+        Report ID: {{REPORT_ID}}<br>
+        Version: {{REPORT_VERSION}}
+    </div>
+
+    {{REPORT_STATUS_BANNER}}
+</header>
+
+<main>
+{{SECTION_CONTENT}}
+</main>
+
+</body>
+</html>
+/* Structured metric tables */
+.structured-table-wrapper {
+    max-width: 100%;
+    overflow-x: auto;
+    margin: 1rem 0 1.5rem;
+}
+.structured-data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+.structured-data-table th,
+.structured-data-table td {
+    padding: 0.5rem 0.65rem;
+    border: 1px solid #d7dce2;
+    text-align: left;
+    vertical-align: top;
+}
+.structured-data-table th {
+    background: #eef2f6;
+}
+.structured-data-table tbody tr:nth-child(even) {
+    background: #f8fafc;
+}
