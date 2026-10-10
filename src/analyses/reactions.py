@@ -126,18 +126,25 @@ def derive_case_outcomes(
     classification.
     """
 
+    cached = getattr(data, "_derived_case_outcomes", None)
+
+    if cached is not None:
+        return cached
+
     records: list[dict[str, object]] = []
 
     reactions = data.reactions.copy()
 
     if reactions.empty:
-        return pd.DataFrame(
+        result = pd.DataFrame(
             columns=[
                 "case_id",
                 "case_outcome",
                 "outcome_supporting_reaction_ids",
             ]
         )
+        data._derived_case_outcomes = result
+        return result
 
     for case_id, group in reactions.groupby(
         "case_id",
@@ -173,7 +180,11 @@ def derive_case_outcomes(
             }
         )
 
-    return pd.DataFrame(records)
+    result = pd.DataFrame(records)
+
+    data._derived_case_outcomes = result
+
+    return result
 
 
 @register_analysis(

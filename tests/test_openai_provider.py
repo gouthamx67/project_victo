@@ -121,7 +121,7 @@ def test_openai_provider_requires_openai_provider_name():
 
     with pytest.raises(
         ValueError,
-        match="provider='openai'",
+        match=r"provider 'openai' or 'groq'",
     ):
         OpenAIResponsesProvider(
             config,

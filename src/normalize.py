@@ -337,171 +337,362 @@ def _case_seriousness_flags(
 # ---------------------------------------------------------------------------
 # Case normalization
 # ---------------------------------------------------------------------------
+#
+# normalize_cases() is implemented with vectorized pandas operations rather
+# than per-group iteration. The per-group reference helpers above
+# (_case_age, _case_seriousness_flags, _case_country_value,
+# _case_single_value, _normalize_country_name) remain the documented,
+# independently-tested definitions of the case-level rules. The vectorized
+# path below reproduces those exact semantics and is covered by the same
+# dataset-level regression tests.
+
+def _clean_string_series(series: pd.Series) -> pd.Series:
+    """Strip whitespace and treat blank strings as missing (pandas.NA)."""
+    cleaned = series.astype("string").str.strip()
+    return cleaned.mask(cleaned.eq(""))
+
+
+def _normalized_country_series(series: pd.Series) -> pd.Series:
+    """Vectorized equivalent of _normalize_country_name for a whole column."""
+    cleaned = series.astype("string").str.strip()
+    cleaned = cleaned.mask(cleaned.eq("").fillna(False))
+    cleaned = cleaned.where(cleaned.notna())
+
+    upper = cleaned.str.upper()
+
+    present = cleaned.notna()
+    result = cleaned.str.title()
+
+    code_mask = upper.isin(COUNTRY_CODE_NAMES)
+    result = result.mask(
+        code_mask,
+        upper.map(COUNTRY_CODE_NAMES),
+    )
+
+    eu_mask = upper.eq("EU").fillna(False)
+    result = result.mask(
+        eu_mask,
+        "European Union (region)",
+    )
+
+    return result.where(present)
+
+
+def _case_unique_summary(
+    case_ids: pd.Series,
+    values: pd.Series,
+) -> tuple[pd.Series, pd.Series]:
+    """
+    Return (distinct_value_count, single_value) per case.
+
+    Missing values are ignored, mirroring _unique_non_missing. The returned
+    single value is only meaningful when the distinct count is exactly one;
+    callers apply that mask explicitly.
+    """
+    frame = pd.DataFrame(
+        {
+            "_cid": case_ids.to_numpy(),
+            "_val": values.to_numpy(),
+        }
+    )
+
+    frame = frame.dropna(subset=["_val"])
+
+    grouped = frame.groupby("_cid")["_val"]
+
+    return grouped.nunique(), grouped.first()
+
+
+def _status_from_counts(
+    index: pd.Index,
+    counts: pd.Series,
+) -> pd.Series:
+    """Map a per-case distinct-value count to single/missing/ambiguous."""
+    status = pd.Series("missing", index=index, dtype="string")
+    status = status.mask(counts.eq(1), "single")
+    status = status.mask(counts.gt(1), "ambiguous")
+    return status
+
+
+def _case_flag_from_vocab(
+    index: pd.Index,
+    case_ids: pd.Series,
+    values: pd.Series,
+    *,
+    true_value: str,
+    false_value: str,
+) -> tuple[pd.Series, pd.Series]:
+    """
+    Reproduce the serious/expedite aggregation.
+
+    A case is True when every observed value is true_value, False when every
+    observed value is false_value, missing when none were observed, and
+    otherwise ambiguous (including unrecognized or blank values).
+    """
+    notna = values.notna()
+    is_true = values.eq(true_value)
+    is_false = values.eq(false_value)
+
+    total = (
+        notna.groupby(case_ids).sum().reindex(index, fill_value=0)
+    )
+    n_true = (
+        is_true.groupby(case_ids).sum().reindex(index, fill_value=0)
+    )
+    n_false = (
+        is_false.groupby(case_ids).sum().reindex(index, fill_value=0)
+    )
+
+    all_true = total.gt(0) & n_true.eq(total)
+    all_false = total.gt(0) & n_false.eq(total)
+
+    result = pd.Series(pd.NA, index=index, dtype="boolean")
+    result = result.mask(all_true, True)
+    result = result.mask(all_false, False)
+
+    status = pd.Series("ambiguous", index=index, dtype="string")
+    status = status.mask(total.eq(0), "missing")
+    status = status.mask(all_true | all_false, "single")
+
+    return result, status
+
 
 def normalize_cases(df: pd.DataFrame) -> pd.DataFrame:
     """Create exactly one normalized case record per safetyreportid."""
-    records: list[dict[str, object]] = []
-
-    for case_id, group in df.groupby(
-        "safetyreportid",
-        sort=True,
-        dropna=False,
-    ):
-        record: dict[str, object] = {
-            "case_id": str(case_id),
-            "source_row_count": len(group),
-        }
-
-        receivedate = pd.to_datetime(
-            group["receivedate"],
-            format="%Y%m%d",
-            errors="coerce",
-        )
-
-        unique_dates = receivedate.dropna().unique()
-
-        if len(unique_dates) == 1:
-            date = pd.Timestamp(unique_dates[0])
-            record["receivedate"] = date
-            record["report_month"] = date.strftime("%Y-%m")
-            record["receivedate_status"] = "single"
-        elif len(unique_dates) == 0:
-            record["receivedate"] = pd.NaT
-            record["report_month"] = pd.NA
-            record["receivedate_status"] = "missing"
-        else:
-            record["receivedate"] = pd.NaT
-            record["report_month"] = pd.NA
-            record["receivedate_status"] = "ambiguous"
-
-        serious_values = (
-            group["serious"]
-            .astype("string")
-            .str.strip()
-            .str.lower()
-        )
-
-        serious_unique = sorted(
-            set(serious_values.dropna().tolist())
-        )
-
-        if serious_unique == ["serious"]:
-            record["serious"] = True
-            record["serious_status"] = "single"
-        elif serious_unique == ["not serious"]:
-            record["serious"] = False
-            record["serious_status"] = "single"
-        elif not serious_unique:
-            record["serious"] = pd.NA
-            record["serious_status"] = "missing"
-        else:
-            record["serious"] = pd.NA
-            record["serious_status"] = "ambiguous"
-
-        record.update(_case_seriousness_flags(group))
-
-        expedite_values = (
-            group["fulfillexpeditecriteria"]
-            .astype("string")
-            .str.strip()
-            .str.lower()
-        )
-
-        expedite_unique = sorted(
-            set(expedite_values.dropna().tolist())
-        )
-
-        if expedite_unique == ["yes"]:
-            record["expedite"] = True
-            record["expedite_status"] = "single"
-        elif expedite_unique == ["no"]:
-            record["expedite"] = False
-            record["expedite_status"] = "single"
-        elif not expedite_unique:
-            record["expedite"] = pd.NA
-            record["expedite_status"] = "missing"
-        else:
-            record["expedite"] = pd.NA
-            record["expedite_status"] = "ambiguous"
-
-        sex, sex_status = _case_single_value(
-            group,
-            "patient_patientsex",
-        )
-
-        record["sex"] = (
-            str(sex).strip().lower()
-            if not pd.isna(sex)
-            else pd.NA
-        )
-        record["sex_status"] = sex_status
-
-        record.update(_case_age(group))
-
-        age_group, age_group_status = _case_single_value(
-            group,
-            "patient_patientagegroup",
-        )
-
-        record["age_group"] = (
-            str(age_group).strip().lower()
-            if not pd.isna(age_group)
-            else pd.NA
-        )
-        record["age_group_status"] = age_group_status
-
-        occurcountry, occurcountry_status = _case_country_value(
-            group,
-            "occurcountry",
-        )
-
-        reporter_country, reporter_country_status = (
-            _case_country_value(
-                group,
-                "primarysource_reportercountry",
-            )
-        )
-
-        record["occurcountry"] = occurcountry
-        record["occurcountry_status"] = occurcountry_status
-
-        record["reporter_country"] = reporter_country
-        record["reporter_country_status"] = (
-            reporter_country_status
-        )
-
-        row_occur = (
-            group["occurcountry"]
-            .astype("string")
-            .str.strip()
-            .str.upper()
-        )
-
-        row_reporter = (
-            group["primarysource_reportercountry"]
-            .astype("string")
-            .str.strip()
-            .str.upper()
-        )
-
-        mismatch = (
-            row_occur.notna()
-            & row_reporter.notna()
-            & row_occur.ne("")
-            & row_reporter.ne("")
-            & row_occur.ne(row_reporter)
-        )
-
-        record["country_mismatch"] = bool(mismatch.any())
-
-        records.append(record)
-
-    cases = pd.DataFrame(records)
-
-    if cases.empty:
+    if df.empty:
         raise ValueError("Normalization produced zero cases.")
 
-    return cases
+    case_ids = df["safetyreportid"].astype("string")
+
+    usable = case_ids.notna()
+
+    if not usable.any():
+        raise ValueError("Normalization produced zero cases.")
+
+    index = pd.Index(
+        sorted(case_ids.loc[usable].unique()),
+        name="case_id",
+    )
+
+    working = df.loc[usable]
+    working_ids = case_ids.loc[usable]
+
+    records = pd.DataFrame(index=index)
+
+    records["source_row_count"] = (
+        working_ids.value_counts()
+        .reindex(index)
+        .fillna(0)
+        .astype(int)
+    )
+
+    # --- receivedate -------------------------------------------------------
+    receivedate = pd.to_datetime(
+        working["receivedate"],
+        format="%Y%m%d",
+        errors="coerce",
+    )
+
+    date_counts, date_first = _case_unique_summary(
+        working_ids,
+        receivedate,
+    )
+    date_counts = date_counts.reindex(index, fill_value=0)
+
+    date_single = date_first.reindex(index).where(
+        date_counts.eq(1)
+    )
+
+    records["receivedate"] = date_single
+    records["report_month"] = date_single.dt.strftime("%Y-%m")
+    records["receivedate_status"] = _status_from_counts(
+        index,
+        date_counts,
+    )
+
+    # --- serious / expedite -----------------------------------------------
+    serious_norm = (
+        working["serious"].astype("string").str.strip().str.lower()
+    )
+
+    (
+        records["serious"],
+        records["serious_status"],
+    ) = _case_flag_from_vocab(
+        index,
+        working_ids,
+        serious_norm,
+        true_value="serious",
+        false_value="not serious",
+    )
+
+    for source_column, output_column in SERIOUSNESS_FLAG_COLUMNS.items():
+        values = (
+            working[source_column]
+            .astype("string")
+            .str.strip()
+            .str.lower()
+        )
+
+        has_yes = (
+            values.eq("yes")
+            .groupby(working_ids)
+            .any()
+            .reindex(index, fill_value=False)
+        )
+        has_no = (
+            values.eq("no")
+            .groupby(working_ids)
+            .any()
+            .reindex(index, fill_value=False)
+        )
+
+        flag = pd.Series(pd.NA, index=index, dtype="boolean")
+        flag = flag.mask(has_yes, True)
+        flag = flag.mask(~has_yes & has_no, False)
+
+        records[output_column] = flag
+        records[f"{output_column}_conflict"] = (
+            has_yes & has_no
+        ).astype(bool)
+
+    expedite_norm = (
+        working["fulfillexpeditecriteria"]
+        .astype("string")
+        .str.strip()
+        .str.lower()
+    )
+
+    (
+        records["expedite"],
+        records["expedite_status"],
+    ) = _case_flag_from_vocab(
+        index,
+        working_ids,
+        expedite_norm,
+        true_value="yes",
+        false_value="no",
+    )
+
+    # --- sex ---------------------------------------------------------------
+    sex_counts, sex_first = _case_unique_summary(
+        working_ids,
+        _clean_string_series(working["patient_patientsex"]),
+    )
+    sex_counts = sex_counts.reindex(index, fill_value=0)
+
+    records["sex"] = (
+        sex_first.reindex(index)
+        .where(sex_counts.eq(1))
+        .str.lower()
+    )
+    records["sex_status"] = _status_from_counts(index, sex_counts)
+
+    # --- age ---------------------------------------------------------------
+    age = pd.to_numeric(
+        working["patient_patientonsetage"],
+        errors="coerce",
+    )
+    unit = (
+        working["patient_patientonsetageunit"]
+        .astype("string")
+        .str.strip()
+        .str.lower()
+    )
+
+    pairs = pd.DataFrame(
+        {
+            "_cid": working_ids.to_numpy(),
+            "_age": age.to_numpy(),
+            "_unit": unit.to_numpy(),
+        }
+    )
+    pairs = pairs[
+        pairs["_age"].notna()
+        & pairs["_unit"].isin(AGE_UNIT_TO_YEARS.keys())
+    ].drop_duplicates()
+
+    pair_counts = (
+        pairs.groupby("_cid").size().reindex(index, fill_value=0)
+    )
+    pair_first = pairs.groupby("_cid").first()
+
+    single_pair = pair_counts.eq(1)
+
+    onset_age = pair_first["_age"].reindex(index).where(single_pair)
+    onset_unit = pair_first["_unit"].reindex(index).where(single_pair)
+
+    records["onset_age"] = onset_age
+    records["onset_age_unit"] = onset_unit
+    records["age_years"] = (
+        onset_age * onset_unit.map(AGE_UNIT_TO_YEARS)
+    )
+    records["age_status"] = _status_from_counts(index, pair_counts)
+
+    # --- age group ---------------------------------------------------------
+    age_group_counts, age_group_first = _case_unique_summary(
+        working_ids,
+        _clean_string_series(working["patient_patientagegroup"]),
+    )
+    age_group_counts = age_group_counts.reindex(index, fill_value=0)
+
+    records["age_group"] = (
+        age_group_first.reindex(index)
+        .where(age_group_counts.eq(1))
+        .str.lower()
+    )
+    records["age_group_status"] = _status_from_counts(
+        index,
+        age_group_counts,
+    )
+
+    # --- countries ---------------------------------------------------------
+    for source_column, prefix in (
+        ("occurcountry", "occurcountry"),
+        ("primarysource_reportercountry", "reporter_country"),
+    ):
+        country_counts, country_first = _case_unique_summary(
+            working_ids,
+            _normalized_country_series(working[source_column]),
+        )
+        country_counts = country_counts.reindex(index, fill_value=0)
+
+        records[prefix] = country_first.reindex(index).where(
+            country_counts.eq(1)
+        )
+        records[f"{prefix}_status"] = _status_from_counts(
+            index,
+            country_counts,
+        )
+
+    row_occur = (
+        working["occurcountry"]
+        .astype("string")
+        .str.strip()
+        .str.upper()
+    )
+    row_reporter = (
+        working["primarysource_reportercountry"]
+        .astype("string")
+        .str.strip()
+        .str.upper()
+    )
+
+    valid_occur = row_occur.notna() & row_occur.ne("")
+    valid_reporter = row_reporter.notna() & row_reporter.ne("")
+
+    row_mismatch = (
+        valid_occur & valid_reporter & row_occur.ne(row_reporter)
+    ).fillna(False).astype(bool)
+
+    records["country_mismatch"] = (
+        row_mismatch.groupby(working_ids)
+        .any()
+        .reindex(index, fill_value=False)
+        .astype(bool)
+    )
+
+    return records.reset_index()
 
 
 # ---------------------------------------------------------------------------

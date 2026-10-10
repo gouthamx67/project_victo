@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from src.llm_provider import build_provider
 from src.report_pipeline import (
     run_report_pipeline,
     write_html_report,
@@ -48,9 +49,38 @@ def build_parser() -> argparse.ArgumentParser:
         "--llm",
         action="store_true",
         help=(
-            "Use the configured LLM provider. "
-            "Without this flag, deterministic no-LLM mode is used."
+            "Deprecated alias for --provider mock. Prefer --provider."
         ),
+    )
+
+    parser.add_argument(
+        "--provider",
+        choices=["none", "mock", "openai", "groq"],
+        default=None,
+        help=(
+            "LLM provider for narrative sections. "
+            "'none' (default) uses deterministic templates; "
+            "'mock' is an offline test double; "
+            "'groq' uses the Groq chat/completions API (GROQ_API_KEY); "
+            "'openai' uses the OpenAI Responses API (OPENAI_API_KEY)."
+        ),
+    )
+
+    parser.add_argument(
+        "--model",
+        default=None,
+        help=(
+            "Model id for the selected provider. Defaults to the "
+            "provider's environment variable (GROQ_MODEL / OPENAI_MODEL) "
+            "or a built-in default."
+        ),
+    )
+
+    parser.add_argument(
+        "--max-tokens",
+        type=int,
+        default=1000,
+        help="Maximum output tokens per generated section.",
     )
 
     parser.add_argument(
@@ -67,11 +97,24 @@ def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
 
+    provider_name = args.provider
+    if provider_name is None:
+        provider_name = "mock" if args.llm else "none"
+
+    provider = build_provider(
+        provider=provider_name,
+        model=args.model,
+        max_tokens=args.max_tokens,
+    )
+
+    use_llm = provider is not None
+
     result = run_report_pipeline(
         csv_path=Path(args.csv),
         config_path=Path(args.config),
         prompt_path=Path(args.prompt),
-        use_llm=args.llm,
+        provider=provider,
+        use_llm=use_llm,
         max_retries=args.max_retries,
     )
 
@@ -90,7 +133,7 @@ def main() -> int:
     print(f"reactions: {len(result.normalized.reactions)}")
     print(f"analyses: {len(result.analyses)}")
     print(f"sections: {len(result.sections)}")
-    print(f"mode: {'llm' if args.llm else 'no-llm'}")
+    print(f"provider: {provider_name}")
     print(f"output: {output_path}")
     print("=" * 72)
 

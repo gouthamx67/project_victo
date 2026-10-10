@@ -20,6 +20,14 @@ STRICT RULES:
 13. Do not expose supporting IDs unless specifically requested.
 14. Use the exact metric_id inside braces when referencing a metric.
 15. Do not use arithmetic or expressions inside metric slots.
+16. Write NO digit characters (0-9) anywhere in your output, except
+    inside a {metric_id} slot. Do not write years, month labels, dates,
+    counts, or percentages as text. Refer to such evidence only through
+    its metric slot.
+17. For list or table metrics (for example monthly_case_counts,
+    top_reactions, monthly_case_deviations, case_listing), reference the
+    {metric_id} placeholder once and do NOT enumerate, list, or describe
+    the individual items or their values.
 
 SECTION: {{SECTION_TITLE}}
 

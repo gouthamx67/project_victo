@@ -1,5 +1,16 @@
+# Core analysis + templating
 pandas
 pydantic
 PyYAML
 jinja2
+
+# Backend API
+fastapi
+uvicorn
+python-multipart
+
+# Optional: real LLM narratives (Groq and OpenAI both use the OpenAI SDK)
+openai
+
+# Tests
 pytest

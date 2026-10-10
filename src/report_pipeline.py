@@ -435,12 +435,8 @@ def run_report_pipeline(
         )
 
         rendered_prompt = None
-        provider_id = type(selected_provider).__name__
-        model_id = getattr(
-            getattr(selected_provider, "config", None),
-            "model",
-            "not_applicable",
-        )
+        provider_id = "deterministic"
+        model_id = "not_applicable"
         grounding_status = "not_applicable_deterministic"
         generation_source = "deterministic_template"
 
@@ -457,6 +453,11 @@ def run_report_pipeline(
             )
 
             provider_id = type(selected_provider).__name__
+            model_id = getattr(
+                getattr(selected_provider, "config", None),
+                "model",
+                "not_applicable",
+            )
             generation_source = "provider"
             narrative = generate_grounded_narrative(
                 provider=selected_provider,

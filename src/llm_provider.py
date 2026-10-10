@@ -215,6 +215,170 @@ class OpenAIResponsesProvider(LLMProvider):
         )
 
 
+class GroqChatProvider(LLMProvider):
+    """
+    Groq provider using the OpenAI-compatible chat completions API.
+
+    Groq exposes an OpenAI-compatible ``/chat/completions`` endpoint rather
+    than OpenAI's ``/responses`` endpoint, so this provider intentionally uses
+    ``client.chat.completions.create``. It reuses the OpenAI Python SDK with a
+    Groq base URL and requires ``GROQ_API_KEY`` (or an explicit key).
+
+    Like the OpenAI provider, it only ever receives a SectionContext and an
+    already-rendered prompt. It never receives the raw dataset.
+    """
+
+    GROQ_BASE_URL = "https://api.groq.com/openai/v1"
+
+    def __init__(
+        self,
+        config: LLMGenerationConfig,
+        *,
+        api_key: str | None = None,
+        client: Any | None = None,
+    ) -> None:
+        if config.provider != "groq":
+            raise ValueError(
+                "GroqChatProvider requires provider 'groq'."
+            )
+
+        if config.temperature != 0.0:
+            raise ValueError(
+                "GroqChatProvider requires temperature=0.0 "
+                "for reproducible generation."
+            )
+
+        if config.max_tokens <= 0:
+            raise ValueError(
+                "max_tokens must be greater than zero."
+            )
+
+        self.config = config
+
+        if client is not None:
+            self._client = client
+            return
+
+        resolved_api_key = api_key or os.getenv("GROQ_API_KEY")
+
+        if not resolved_api_key:
+            raise ValueError(
+                "API key is required. Set GROQ_API_KEY "
+                "or pass api_key explicitly."
+            )
+
+        try:
+            from openai import OpenAI
+        except ImportError as exc:
+            raise RuntimeError(
+                "The OpenAI SDK is not installed. "
+                "Install it with: pip install openai"
+            ) from exc
+
+        self._client = OpenAI(
+            api_key=resolved_api_key,
+            base_url=self.GROQ_BASE_URL,
+        )
+
+    def generate(
+        self,
+        context: SectionContext,
+        prompt: str,
+    ) -> LLMNarrative:
+        if not prompt.strip():
+            raise ValueError(
+                "Prompt must not be empty."
+            )
+
+        response = self._client.chat.completions.create(
+            model=self.config.model,
+            messages=[
+                {
+                    "role": "user",
+                    "content": prompt,
+                }
+            ],
+            temperature=0.0,
+            max_tokens=self.config.max_tokens,
+        )
+
+        choices = getattr(response, "choices", None)
+
+        if not choices:
+            raise ValueError(
+                "Groq Chat Completions API returned no choices."
+            )
+
+        message = getattr(choices[0], "message", None)
+        text = getattr(message, "content", None)
+
+        if not isinstance(text, str) or not text.strip():
+            raise ValueError(
+                "Groq Chat Completions API returned no usable text."
+            )
+
+        return LLMNarrative(
+            text=text.strip()
+        )
+
+
+def build_provider(
+    *,
+    provider: str,
+    model: str | None = None,
+    max_tokens: int = 1000,
+    api_key: str | None = None,
+) -> LLMProvider | None:
+    """
+    Build a configured LLM provider from a provider name.
+
+    Returns ``None`` for the deterministic no-LLM mode so callers can pass
+    the result straight into ``run_report_pipeline``.
+    """
+    normalized = (provider or "none").strip().lower()
+
+    if normalized in {"none", ""}:
+        return None
+
+    if normalized == "mock":
+        return MockLLMProvider()
+
+    default_models = {
+        "groq": "openai/gpt-oss-120b",
+        "openai": "gpt-5-mini",
+    }
+
+    default_model_variables = {
+        "groq": "GROQ_MODEL",
+        "openai": "OPENAI_MODEL",
+    }
+
+    if normalized not in default_models:
+        raise ValueError(
+            "Unsupported provider: "
+            f"{provider!r}. Expected one of "
+            "'none', 'mock', 'openai', 'groq'."
+        )
+
+    resolved_model = (
+        model
+        or os.getenv(default_model_variables[normalized])
+        or default_models[normalized]
+    )
+
+    config = LLMGenerationConfig(
+        provider=normalized,
+        model=resolved_model,
+        temperature=0.0,
+        max_tokens=max_tokens,
+    )
+
+    if normalized == "groq":
+        return GroqChatProvider(config, api_key=api_key)
+
+    return OpenAIResponsesProvider(config, api_key=api_key)
+
+
 def load_prompt(path: str | Path) -> str:
     """
     Load a prompt template from disk.

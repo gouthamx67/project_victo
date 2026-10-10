@@ -15,7 +15,8 @@ from src.analysis_framework import AnalysisResult
 from src.evidence_trace import build_evidence_trace
 from src.llm_provider import (
     LLMGenerationConfig,
-    OpenAIResponsesProvider,
+    LLMProvider,
+    build_provider,
 )
 from src.report_config import load_report_config
 from src.report_pipeline import (
@@ -124,7 +125,7 @@ def _read_json(path: Path) -> Any:
 
 
 def _build_generation_config() -> LLMGenerationConfig:
-    provider = os.getenv("LLM_PROVIDER", "openai").strip().lower()
+    provider = os.getenv("LLM_PROVIDER", "groq").strip().lower()
     if provider not in {"openai", "groq"}:
         raise ValueError("LLM_PROVIDER must be 'openai' or 'groq'.")
 
@@ -147,12 +148,19 @@ def _build_generation_config() -> LLMGenerationConfig:
     )
 
 
-def _build_llm_provider() -> OpenAIResponsesProvider:
+def _build_llm_provider() -> LLMProvider:
     generation_config = _build_generation_config()
 
-    return OpenAIResponsesProvider(
-        generation_config,
+    provider = build_provider(
+        provider=generation_config.provider,
+        model=generation_config.model,
+        max_tokens=generation_config.max_tokens,
     )
+
+    if provider is None:
+        raise ValueError("LLM provider is not configured.")
+
+    return provider
 
 
 def _load_review_set_for_run(
