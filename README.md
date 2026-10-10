@@ -64,5 +64,4 @@ curl -sS -X POST http://127.0.0.1:8000/runs \
 ## Safety note
 Generated reports don't replace qualified review. Verify findings against source data and reporting requirements before finalizing.
 
-## License
-Add license information here.
+
