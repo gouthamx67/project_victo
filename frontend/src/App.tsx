@@ -881,7 +881,8 @@ function App() {
                                 className="flag-button"
                                 disabled={
                                   reviewLoading ===
-                                  review.section_id
+                                    review.section_id ||
+                                  !reviewer.trim()
                                 }
                                 onClick={() =>
                                   updateReview(
@@ -898,7 +899,8 @@ function App() {
                                 className="approve-button"
                                 disabled={
                                   reviewLoading ===
-                                  review.section_id
+                                    review.section_id ||
+                                  !reviewer.trim()
                                 }
                                 onClick={() =>
                                   updateReview(
@@ -913,6 +915,13 @@ function App() {
                                   : "Approve section"}
                               </button>
                             </div>
+
+                            {!reviewer.trim() && (
+                              <p className="review-hint">
+                                Enter a reviewer name above to enable
+                                Approve and Flag.
+                              </p>
+                            )}
                           </div>
                         </article>
                       );

@@ -262,7 +262,7 @@ def _extract_persisted_narrative(
 
 def _load_narratives(
     run_directory: Path,
-) -> dict[str, dict[str, str]]:
+) -> dict[str, dict[str, Any]]:
     payload = _read_json(
         run_directory / "narratives.json",
     )
@@ -273,7 +273,7 @@ def _load_narratives(
             detail="Narrative artifact must contain a JSON object.",
         )
 
-    normalized: dict[str, dict[str, str]] = {}
+    normalized: dict[str, dict[str, Any]] = {}
 
     for section_id, value in payload.items():
         if not isinstance(section_id, str):
@@ -310,6 +310,12 @@ def _load_narratives(
         normalized[section_id] = {
             "narrative": narrative,
             "narrative_template": narrative_template,
+            "ai_enabled": value.get("ai_enabled"),
+            "provider_id": value.get("provider_id"),
+            "model_id": value.get("model_id"),
+            "grounding_status": value.get("grounding_status"),
+            "generation_source": value.get("generation_source"),
+            "rendered_prompt_hash": value.get("rendered_prompt_hash"),
         }
 
     return normalized
@@ -362,16 +368,44 @@ def _reconstruct_result_for_finalization(
             analyses=analyses,
         )
 
+        ai_enabled = narrative_data.get("ai_enabled")
+        if ai_enabled is None:
+            ai_enabled = section_config.ai
+        ai_enabled = bool(ai_enabled)
+
+        provider_id = narrative_data.get("provider_id") or (
+            "unknown" if ai_enabled else "deterministic"
+        )
+        model_id = narrative_data.get("model_id") or (
+            "unknown" if ai_enabled else "not_applicable"
+        )
+        grounding_status = (
+            narrative_data.get("grounding_status") or "not_recorded"
+        )
+        generation_source = narrative_data.get(
+            "generation_source"
+        ) or (
+            "unknown" if ai_enabled else "deterministic_template"
+        )
+
         sections.append(
             PipelineSection(
                 section_id=section_config.id,
                 title=section_config.title,
+                ai_enabled=ai_enabled,
                 narrative=narrative_data["narrative"],
                 narrative_template=(
                     narrative_data["narrative_template"]
                 ),
                 context=context,
                 evidence=evidence,
+                provider_id=provider_id,
+                model_id=model_id,
+                rendered_prompt_hash=narrative_data.get(
+                    "rendered_prompt_hash"
+                ),
+                grounding_status=grounding_status,
+                generation_source=generation_source,
             )
         )
 

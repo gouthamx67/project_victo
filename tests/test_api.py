@@ -480,3 +480,95 @@ def test_finalize_rejects_unreviewed_sections(
     response = client.post(f"/runs/{run_id}/finalize")
 
     assert response.status_code == 409
+
+
+def test_finalize_approved_run_returns_final(
+    monkeypatch,
+    tmp_path: Path,
+):
+    """
+    Regression test: finalizing an approved run must reconstruct the
+    persisted report artifacts (including section provenance) and render
+    the FINAL report instead of raising.
+    """
+
+    import json
+
+    monkeypatch.setattr(
+        api,
+        "API_OUTPUT_ROOT",
+        tmp_path / "outputs",
+    )
+
+    result = _fake_result()
+    run_id = "run-finalize-approved"
+
+    monkeypatch.setattr(
+        api,
+        "_load_report_config",
+        lambda: result.config,
+    )
+
+    run_directory = tmp_path / "outputs" / run_id
+    run_directory.mkdir(parents=True)
+
+    section = result.sections[0]
+
+    (run_directory / "narratives.json").write_text(
+        json.dumps(
+            {
+                section.section_id: {
+                    "narrative": {"text": section.narrative_template},
+                    "narrative_template": section.narrative_template,
+                    "ai_enabled": False,
+                    "provider_id": "deterministic",
+                    "model_id": "not_applicable",
+                    "grounding_status": "not_recorded",
+                    "generation_source": "deterministic_template",
+                    "rendered_prompt_hash": None,
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    (run_directory / "analyses.json").write_text(
+        json.dumps([analysis.model_dump() for analysis in result.analyses]),
+        encoding="utf-8",
+    )
+
+    (run_directory / "evidence.json").write_text(
+        "{}",
+        encoding="utf-8",
+    )
+
+    (run_directory / "review.json").write_text(
+        result.review_set.model_dump_json(),
+        encoding="utf-8",
+    )
+
+    approve = client.post(
+        f"/runs/{run_id}/review",
+        json={
+            "section_id": section.section_id,
+            "status": "APPROVED",
+            "reviewer": "reviewer-1",
+            "comment": "Approved.",
+        },
+    )
+
+    assert approve.status_code == 200
+
+    response = client.post(f"/runs/{run_id}/finalize")
+
+    assert response.status_code == 200
+
+    payload = response.json()
+
+    assert payload["status"] == "FINAL"
+
+    report_html = (run_directory / "report.html").read_text(
+        encoding="utf-8"
+    )
+
+    assert "FINAL — HUMAN REVIEW APPROVED" in report_html

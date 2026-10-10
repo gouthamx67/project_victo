@@ -835,12 +835,25 @@ a {
   gap: 8px;
 }
 
+.review-hint {
+  margin: 8px 0 0;
+  text-align: right;
+  font-size: 11px;
+  color: #9a6b2f;
+}
+
 .flag-button,
 .approve-button {
   padding: 9px 12px;
   border-radius: 8px;
   font-size: 10px;
   font-weight: 750;
+}
+
+.flag-button:disabled,
+.approve-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .flag-button {

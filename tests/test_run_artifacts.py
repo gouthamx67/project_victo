@@ -228,7 +228,15 @@ def test_narratives_artifact_contains_renderable_section_content(
         assert set(payload) == {
             "narrative",
             "narrative_template",
+            "ai_enabled",
+            "provider_id",
+            "model_id",
+            "grounding_status",
+            "generation_source",
+            "rendered_prompt_hash",
         }
+
+        assert isinstance(payload["ai_enabled"], bool)
 
         narrative = payload["narrative"]
 

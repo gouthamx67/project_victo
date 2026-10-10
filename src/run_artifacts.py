@@ -99,15 +99,25 @@ def _evidence_payload(
 
 def _narratives_payload(
     result: ReportPipelineResult,
-) -> dict[str, dict[str, str]]:
+) -> dict[str, dict[str, Any]]:
     """
     Persist the generated narrative templates so a reviewed run can be
     finalized without regenerating the LLM output.
+
+    Per-section provenance (AI vs deterministic, provider, model, grounding
+    status) is persisted alongside the text so a finalized report keeps the
+    same generation metadata as the reviewed draft.
     """
     return {
         section.section_id: {
             "narrative": section.narrative,
             "narrative_template": section.narrative_template,
+            "ai_enabled": section.ai_enabled,
+            "provider_id": section.provider_id,
+            "model_id": section.model_id,
+            "grounding_status": section.grounding_status,
+            "generation_source": section.generation_source,
+            "rendered_prompt_hash": section.rendered_prompt_hash,
         }
         for section in result.sections
     }
