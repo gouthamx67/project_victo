@@ -817,7 +817,17 @@ def render_html_report(
 
             # Keep the trend-method explanation even when the metric
             # sentence is removed to avoid duplicating the data table.
-            if section.section_id == "trends_and_important_observations":
+            # The note is added for any section that reports monthly
+            # deviation review, unless the narrative already explains
+            # the method (for example a deterministic template).
+            if (
+                "monthly_case_deviations" in {
+                    metric.metric_id
+                    for metric in section.context.metrics
+                }
+                and "excluded from the full-month baseline"
+                not in narrative_html
+            ):
                 narrative_html += (
                     '<p class="trend-method-note">'
                     "Trend review method: the first and last observed "

@@ -1,5 +1,6 @@
 # tests/test_report_pipeline.py
 import json
+from dataclasses import replace
 
 import pytest
 
@@ -136,6 +137,53 @@ def test_rendered_report_contains_matching_evidence_anchor():
 
     assert 'id="evidence-case_count"' in html
     assert 'href="#evidence-case_count"' in html
+
+
+def test_trend_method_note_added_when_narrative_omits_method():
+    result = run_report_pipeline(
+        csv_path=DATASET,
+        config_path=CONFIG,
+        prompt_path=PROMPT,
+        use_llm=False,
+    )
+
+    sections = [
+        replace(
+            section,
+            narrative_template=(
+                "Review flags are reported in "
+                "{monthly_case_deviations}."
+            ),
+        )
+        if section.section_id == "trend_review"
+        else section
+        for section in result.sections
+    ]
+
+    html = render_html_report(
+        replace(result, sections=sections),
+        TEMPLATE,
+    )
+
+    assert 'class="trend-method-note"' in html
+    assert "1.5 times the eligible full-month mean" in html
+
+
+def test_trend_method_note_skipped_when_template_explains_method():
+    result = run_report_pipeline(
+        csv_path=DATASET,
+        config_path=CONFIG,
+        prompt_path=PROMPT,
+        use_llm=False,
+    )
+
+    html = render_html_report(
+        result,
+        TEMPLATE,
+    )
+
+    assert 'class="trend-method-note"' not in html
+    assert "excluded from the full-month baseline" in html
 
 
 def test_llm_context_does_not_include_supporting_case_ids():

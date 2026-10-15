@@ -85,12 +85,48 @@ def test_monthly_deviations_do_not_dump_every_record() -> None:
     )
 
     assert rendered == (
-        "No monthly deviations above "
-        "the configured threshold."
+        "the absence of monthly deviations "
+        "above the configured threshold"
     )
 
     assert "'reporting_month'" not in rendered
     assert "'deviation_flag'" not in rendered
+
+
+def test_monthly_deviations_summarize_flagged_months() -> None:
+    result = AnalysisResult(
+        metric_id="monthly_case_deviations",
+        value=[
+            {
+                "reporting_month": "2024-12",
+                "case_count": 21,
+                "mean_monthly_case_count": 78.7,
+                "deviation_threshold": 118.1,
+                "deviation_flag": False,
+            },
+            {
+                "reporting_month": "2025-03",
+                "case_count": 402,
+                "mean_monthly_case_count": 78.7,
+                "deviation_threshold": 118.1,
+                "deviation_flag": True,
+            },
+        ],
+        definition="Monthly deviation review.",
+        population="case",
+        supporting_ids=[],
+        version="1.0.0",
+    )
+
+    rendered = format_metric_value(
+        result.metric_id,
+        result.value,
+    )
+
+    assert rendered == (
+        "monthly deviations flagged for human review in 2025-03 "
+        "(descriptive flags, not confirmed signals)"
+    )
 
 
 def test_narrative_uses_readable_metric_values() -> None:

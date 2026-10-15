@@ -36,6 +36,7 @@ type EvidenceSection = {
 type NarrativeArtifact = {
   narrative?: unknown;
   narrative_template?: unknown;
+  generation_source?: unknown;
 };
 
 type NarrativesPayload = Record<string, NarrativeArtifact>;
@@ -66,6 +67,18 @@ function extractNarrative(value: unknown): string {
 
 function statusLabel(status: string): string {
   return status.replaceAll("_", " ");
+}
+
+function narrativeSourceLabel(source: string): string {
+  if (source === "provider") {
+    return "AI-GENERATED NARRATIVE";
+  }
+
+  if (source === "deterministic_template") {
+    return "DETERMINISTIC NARRATIVE";
+  }
+
+  return "NARRATIVE";
 }
 
 function formatDate(value?: string): string {
@@ -334,6 +347,10 @@ function App() {
         narrative: extractNarrative(
           narrativeArtifact?.narrative,
         ),
+        generationSource:
+          typeof narrativeArtifact?.generation_source === "string"
+            ? narrativeArtifact.generation_source
+            : "",
         evidence: evidenceBySection.get(review.section_id),
       };
     });
@@ -678,6 +695,7 @@ function App() {
                     ({
                       review,
                       narrative,
+                      generationSource,
                       evidence,
                     }) => {
                       const evidenceOpen =
@@ -722,7 +740,9 @@ function App() {
 
                           <div className="narrative-panel">
                             <div className="panel-label">
-                              AI-GENERATED NARRATIVE
+                              {narrativeSourceLabel(
+                                generationSource,
+                              )}
                             </div>
 
                             <div className="narrative-text">

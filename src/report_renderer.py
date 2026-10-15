@@ -274,6 +274,9 @@ def format_metric_value(
                     metric_id=metric_id,
                 )
 
+            if not value:
+                return "no monthly deviation records available"
+
             flagged = [
                 item
                 for item in value
@@ -282,8 +285,8 @@ def format_metric_value(
 
             if not flagged:
                 return (
-                    "No monthly deviations above "
-                    "the configured threshold."
+                    "the absence of monthly deviations "
+                    "above the configured threshold"
                 )
 
             months = [
@@ -292,9 +295,9 @@ def format_metric_value(
             ]
 
             return (
-                "Monthly deviations flagged for human review: "
+                "monthly deviations flagged for human review in "
                 + ", ".join(months)
-                + ". These are descriptive flags, not confirmed signals."
+                + " (descriptive flags, not confirmed signals)"
             )
 
     return _format_display_value(
