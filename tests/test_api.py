@@ -10,6 +10,7 @@ import src.api as api
 from src.analysis_framework import AnalysisResult
 from src.evidence_trace import build_evidence_trace
 from src.llm_contract import LLMNarrative
+from src.llm_provider import LLMProviderError
 from src.report_config import ReportConfig
 from src.report_pipeline import (
     PipelineSection,
@@ -1025,3 +1026,76 @@ def test_build_llm_provider_rejects_unconfigured_provider(monkeypatch):
 
     with pytest.raises(ValueError, match="not configured"):
         api._build_llm_provider()
+
+
+def test_create_run_llm_without_api_key_returns_503(
+    monkeypatch,
+    tmp_path: Path,
+):
+    output_root = tmp_path / "outputs"
+    monkeypatch.setattr(api, "API_OUTPUT_ROOT", output_root)
+    monkeypatch.setenv("LLM_PROVIDER", "groq")
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+
+    response = client.post(
+        "/runs",
+        data={"use_llm": "true"},
+        files={
+            "file": (
+                DATASET.name,
+                DATASET.read_bytes(),
+                "text/csv",
+            )
+        },
+    )
+
+    assert response.status_code == 503
+    assert "not configured" in response.json()["detail"]
+    assert str(tmp_path) not in response.text
+
+    input_dir = output_root / "_inputs"
+    assert not list(input_dir.glob("*.csv"))
+
+
+def test_create_run_llm_provider_failure_returns_502(
+    monkeypatch,
+    tmp_path: Path,
+):
+    output_root = tmp_path / "outputs"
+    monkeypatch.setattr(api, "API_OUTPUT_ROOT", output_root)
+
+    class FailingProvider:
+        config = None
+
+        def generate(self, context, prompt):
+            raise LLMProviderError(
+                "Groq Chat Completions API request failed "
+                "(InternalServerError): upstream error"
+            )
+
+    monkeypatch.setattr(
+        api,
+        "build_provider",
+        lambda **kwargs: FailingProvider(),
+    )
+
+    response = client.post(
+        "/runs",
+        data={"use_llm": "true"},
+        files={
+            "file": (
+                DATASET.name,
+                DATASET.read_bytes(),
+                "text/csv",
+            )
+        },
+    )
+
+    assert response.status_code == 502
+    detail = response.json()["detail"]
+    assert "failed at the provider" in detail
+    assert "Groq Chat Completions API" in detail
+    assert str(tmp_path) not in response.text
+
+    input_dir = output_root / "_inputs"
+    assert not list(input_dir.glob("*.csv"))

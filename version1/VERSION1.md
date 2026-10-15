@@ -36,7 +36,9 @@ report type.
 
 ## Validation
 - `tests/test_psur_lite_config.py` runs PSUR-lite through the full pipeline.
-- Generated report HTML files are local artifacts and should not be committed.
+- The committed example report (`report_output.html`) was generated from this config
+  by `scripts/generate_example_report.py` and finalized through the review gate.
+- Ad-hoc report output stays local; only the curated example report is committed.
 
 ## Open decisions
 - Which PSUR sections are mandatory vs optional per jurisdiction.

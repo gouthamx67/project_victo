@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
@@ -17,6 +18,71 @@ from src.llm_contract import (
     LLMNarrative,
     SectionContext,
 )
+
+
+class LLMProviderError(RuntimeError):
+    """
+    Raised when a provider call fails at the transport or API level.
+
+    This covers authentication failures, rejected requests, connection
+    errors, and rate limiting after retries. It deliberately does not
+    cover grounding validation, which has its own exception type and
+    deterministic fallback.
+    """
+
+
+_ANSI_ESCAPE_PATTERN = re.compile(
+    r"\x1b(?:\[[0-9;?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\)|[@-Z\\-_])"
+)
+
+_CONTROL_CHARACTER_PATTERN = re.compile(r"[\x00-\x1f\x7f]")
+
+
+def sanitize_api_key(value: str | None) -> str | None:
+    """
+    Normalize an API key read from the environment.
+
+    Pasted keys frequently carry terminal artifacts: ANSI escape
+    sequences (for example ``\\x1b[C`` from an arrow-key press), stray
+    control characters, surrounding whitespace, or wrapping quotes.
+    Any of these make the key invalid at the API edge while looking
+    almost correct, so they are removed here.
+    """
+
+    if value is None:
+        return None
+
+    cleaned = _ANSI_ESCAPE_PATTERN.sub("", value)
+    cleaned = _CONTROL_CHARACTER_PATTERN.sub("", cleaned)
+    cleaned = cleaned.strip().strip("'\"")
+
+    return cleaned or None
+
+
+def read_api_key_from_env(variable: str) -> str | None:
+    """Read and sanitize an API key environment variable."""
+
+    return sanitize_api_key(os.getenv(variable))
+
+
+def _provider_failure_message(
+    channel: str,
+    exc: Exception,
+    *,
+    max_length: int = 300,
+) -> str:
+    """Build a bounded, secret-free provider failure message."""
+
+    detail = str(exc).replace("\n", " ").strip()
+    detail = _CONTROL_CHARACTER_PATTERN.sub("", detail)
+
+    if len(detail) > max_length:
+        detail = detail[:max_length] + "…"
+
+    return (
+        f"{channel} request failed "
+        f"({type(exc).__name__}): {detail}"
+    )
 
 
 class LLMProvider(ABC):
@@ -149,9 +215,9 @@ class OpenAIResponsesProvider(LLMProvider):
         if api_key is not None:
             resolved_api_key = api_key
         elif config.provider == "groq":
-            resolved_api_key = os.getenv("GROQ_API_KEY")
+            resolved_api_key = read_api_key_from_env("GROQ_API_KEY")
         else:
-            resolved_api_key = os.getenv("OPENAI_API_KEY")
+            resolved_api_key = read_api_key_from_env("OPENAI_API_KEY")
 
         if not resolved_api_key:
             variable = (
@@ -188,16 +254,24 @@ class OpenAIResponsesProvider(LLMProvider):
                 "Prompt must not be empty."
             )
 
-        response = self._client.responses.create(
-            model=self.config.model,
-            input=[
-                {
-                    "role": "user",
-                    "content": prompt,
-                }
-            ],
-            max_output_tokens=self.config.max_tokens,
-        )
+        try:
+            response = self._client.responses.create(
+                model=self.config.model,
+                input=[
+                    {
+                        "role": "user",
+                        "content": prompt,
+                    }
+                ],
+                max_output_tokens=self.config.max_tokens,
+            )
+        except Exception as exc:
+            raise LLMProviderError(
+                _provider_failure_message(
+                    "OpenAI Responses API",
+                    exc,
+                )
+            ) from exc
 
         text = getattr(
             response,
@@ -259,7 +333,10 @@ class GroqChatProvider(LLMProvider):
             self._client = client
             return
 
-        resolved_api_key = api_key or os.getenv("GROQ_API_KEY")
+        resolved_api_key = (
+            api_key
+            or read_api_key_from_env("GROQ_API_KEY")
+        )
 
         if not resolved_api_key:
             raise ValueError(
@@ -290,22 +367,42 @@ class GroqChatProvider(LLMProvider):
                 "Prompt must not be empty."
             )
 
-        response = self._client.chat.completions.create(
-            model=self.config.model,
-            messages=[
-                {
-                    "role": "user",
-                    "content": prompt,
-                }
-            ],
-            temperature=0.0,
-            max_tokens=self.config.max_tokens,
-        )
+        request_options: dict[str, Any] = {}
+
+        # gpt-oss models are reasoning models on Groq: their reasoning
+        # tokens count against max_tokens, and at the default effort the
+        # budget can be consumed before any content is emitted. Low
+        # effort keeps the budget for the section narrative itself.
+        if "gpt-oss" in self.config.model.lower():
+            request_options["extra_body"] = {
+                "reasoning_effort": "low",
+            }
+
+        try:
+            response = self._client.chat.completions.create(
+                model=self.config.model,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": prompt,
+                    }
+                ],
+                temperature=0.0,
+                max_tokens=self.config.max_tokens,
+                **request_options,
+            )
+        except Exception as exc:
+            raise LLMProviderError(
+                _provider_failure_message(
+                    "Groq Chat Completions API",
+                    exc,
+                )
+            ) from exc
 
         choices = getattr(response, "choices", None)
 
         if not choices:
-            raise ValueError(
+            raise LLMProviderError(
                 "Groq Chat Completions API returned no choices."
             )
 
@@ -313,8 +410,10 @@ class GroqChatProvider(LLMProvider):
         text = getattr(message, "content", None)
 
         if not isinstance(text, str) or not text.strip():
-            raise ValueError(
-                "Groq Chat Completions API returned no usable text."
+            raise LLMProviderError(
+                "Groq Chat Completions API returned no usable text "
+                "(the model may have exhausted its output budget on "
+                "reasoning tokens)."
             )
 
         return LLMNarrative(

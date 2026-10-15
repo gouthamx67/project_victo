@@ -9,6 +9,7 @@ from src.analyses.core import (
     calculate_distinct_case_reaction_pairs,
     calculate_expedited_case_count,
     calculate_expedited_case_percentage,
+    calculate_non_serious_case_count,
     calculate_reaction_count,
     calculate_serious_case_count,
     calculate_serious_case_percentage,
@@ -101,6 +102,18 @@ def test_serious_case_count():
     assert result.supporting_ids == [
         "CASE-001",
         "CASE-002",
+    ]
+
+
+def test_non_serious_case_count():
+    data = make_test_data()
+
+    result = calculate_non_serious_case_count(data)
+
+    assert result.metric_id == "non_serious_case_count"
+    assert result.value == 1
+    assert result.supporting_ids == [
+        "CASE-003",
     ]
 
 
@@ -272,6 +285,7 @@ def test_metric_definitions_are_present():
     results = [
         calculate_case_count(data),
         calculate_serious_case_count(data),
+        calculate_non_serious_case_count(data),
         calculate_serious_case_percentage(data),
         calculate_expedited_case_count(data),
         calculate_expedited_case_percentage(data),

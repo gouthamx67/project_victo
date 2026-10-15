@@ -3,11 +3,17 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from src.env_loader import load_dotenv_file
 from src.llm_provider import build_provider
 from src.report_pipeline import (
     run_report_pipeline,
     write_html_report,
 )
+
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+load_dotenv_file(PROJECT_ROOT / ".env")
 
 
 def build_parser() -> argparse.ArgumentParser:

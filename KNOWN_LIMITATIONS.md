@@ -36,6 +36,16 @@ Generated content is not considered final solely because it passes automated val
   detector. Metric slots are validated against approved metrics and resolved
   deterministically after narrative validation; this does not prove that all
   surrounding prose is semantically correct.
+- **Phrase-level bans can over-reject:** the validator rejects the phrase
+  “safety signal” even inside a statement that denies a signal. Section
+  instructions therefore use equivalent wording such as “not a validated
+  statistical method.” This is deliberate: in a controlled report, the
+  phrase is treated as unsafe wherever it appears.
+- **Metric definitions are visible to the model and can be echoed:** a
+  narrative that paraphrases a definition may reproduce its numbers or
+  phrasing and fail grounding. Definitions and section instructions are
+  written to be echo-safe (no digits, threshold quantities, or banned
+  phrases), and improving that wording is part of adding an analysis.
 - **Metric-slot checks are limited:** requiring a slot establishes that the
   designated evidence reference appears in the narrative. It does not prove
   every surrounding statement is correct.

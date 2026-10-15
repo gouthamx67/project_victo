@@ -51,12 +51,13 @@ report:
       order: 30
       needs:
         - serious_case_count
+        - non_serious_case_count
         - serious_case_percentage
       ai: true
       instructions: >
-        Describe the deterministic serious-case count and percentage.
-        Do not infer clinical severity beyond the supplied seriousness
-        classification.
+        Describe the deterministic serious-case and non-serious-case counts
+        and the serious percentage. Do not infer clinical severity beyond
+        the supplied seriousness classification.
       style:
         tone: formal
         length: concise
@@ -86,7 +87,7 @@ report:
       instructions: >
         Describe the reported reaction profile using only the supplied
         normalized reaction metrics. Do not infer causality, disproportionality,
-        clinical importance, or safety signals.
+        clinical importance, or safety conclusions.
       style:
         tone: formal
         length: moderate
@@ -118,8 +119,8 @@ report:
       instructions: >
         Describe observable monthly case-volume patterns and any deterministic
         review flags supplied in the context. A review flag must not be
-        described as a safety signal. Do not infer causes for observed
-        changes.
+        interpreted as evidence about product safety. Do not infer causes
+        for observed changes.
       style:
         tone: formal
         length: moderate

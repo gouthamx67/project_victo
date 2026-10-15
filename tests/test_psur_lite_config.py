@@ -40,6 +40,7 @@ def test_psur_lite_uses_existing_metrics() -> None:
         "reporting_period",
         "case_count",
         "serious_case_count",
+        "non_serious_case_count",
         "serious_case_percentage",
         "expedited_case_count",
         "expedited_case_percentage",

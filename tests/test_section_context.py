@@ -144,12 +144,14 @@ def test_section_context_preserves_section_metadata():
     data = make_data()
 
     from src.analyses.core import (
+        calculate_non_serious_case_count,
         calculate_serious_case_count,
         calculate_serious_case_percentage,
     )
 
     results = [
         calculate_serious_case_count(data),
+        calculate_non_serious_case_count(data),
         calculate_serious_case_percentage(data),
     ]
 
@@ -179,6 +181,7 @@ def test_section_context_preserves_metric_order_from_config():
     data = make_data()
 
     from src.analyses.core import (
+        calculate_non_serious_case_count,
         calculate_serious_case_count,
         calculate_serious_case_percentage,
     )
@@ -186,6 +189,7 @@ def test_section_context_preserves_metric_order_from_config():
     # Deliberately pass results in reverse order.
     results = [
         calculate_serious_case_percentage(data),
+        calculate_non_serious_case_count(data),
         calculate_serious_case_count(data),
     ]
 
@@ -200,5 +204,6 @@ def test_section_context_preserves_metric_order_from_config():
         for metric in context.metrics
     ] == [
         "serious_case_count",
+        "non_serious_case_count",
         "serious_case_percentage",
     ]

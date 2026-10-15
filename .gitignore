@@ -35,5 +35,5 @@ Thumbs.db
 .idea/
 
 # Locally generated report artifacts
-/report_output.html
+# (report_output.html is the curated example report and IS committed)
 /reports/*.html

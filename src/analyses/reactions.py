@@ -540,12 +540,13 @@ def calculate_top_serious_reactions(
         metric_id="top_serious_reactions",
         value=value,
         definition=(
-            "The ten most frequently reported normalized reaction "
+            "The most frequently reported normalized reaction "
             "Preferred Terms among reactions belonging to cases whose "
-            "case-level seriousness classification is True. Occurrences "
-            "count reaction records, while distinct_cases counts unique "
-            "serious safety cases containing each Preferred Term. "
-            "Frequency ties are resolved alphabetically."
+            "case-level seriousness classification is True, returned "
+            "as a limited top list. Occurrences count reaction records, "
+            "while distinct_cases counts unique serious safety cases "
+            "containing each Preferred Term. Frequency ties are "
+            "resolved alphabetically."
         ),
         population="reaction",
         unit="reaction_occurrences",

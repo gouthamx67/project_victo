@@ -24,6 +24,7 @@ report:
       needs:
         - case_count
         - serious_case_count
+        - non_serious_case_count
         - serious_case_percentage
         - expedited_case_count
         - expedited_case_percentage
@@ -73,7 +74,7 @@ report:
         - fatal_case_count
         - case_outcome_distribution
       ai: true
-      instructions: "Summarize serious and expedited case counts, fatal outcomes, and case outcomes using supplied metrics only. Explicitly state that 15-day reporting deadlines, timeliness, and compliance cannot be assessed without case-level deadline and submission evidence. Do not infer alert status or lateness."
+      instructions: "Summarize serious and expedited case counts, fatal outcomes, and case outcomes using supplied metrics only. State that expedited-reporting deadlines, timeliness, and submission compliance cannot be assessed without case-level deadline and submission evidence. Do not infer alert status or lateness."
       style:
         tone: neutral
         length: medium
@@ -86,7 +87,7 @@ report:
         - monthly_case_deviations
         - monthly_top_reactions
       ai: true
-      instructions: "Describe supplied monthly case counts, deviations, and reaction patterns. Explain partial boundary months and baseline eligibility when supported. State that the 1.5x deviation threshold is a descriptive heuristic for human review, not a validated safety-signal threshold; no flagged month does not establish absence of safety signals."
+      instructions: "Describe supplied monthly case counts, deviations, and reaction patterns. Explain partial boundary months and baseline eligibility when supported. State that the deviation review is a descriptive heuristic for human review, not a validated statistical method, and that the absence of a deviation flag must not be interpreted as evidence about product safety. Refer to the deviation threshold only through its metric slot; never restate or quantify it, in digits or words. Use the supplied metrics only."
       style:
         tone: neutral
         length: medium

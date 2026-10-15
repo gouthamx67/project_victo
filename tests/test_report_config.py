@@ -105,6 +105,7 @@ def test_all_required_metrics_are_unique_and_ordered():
         "fatal_case_count",
         "monthly_case_deviations",
         "monthly_case_counts",
+        "non_serious_case_count",
         "top_reactions",
         "unique_reaction_count",
         "reaction_outcome_distribution",

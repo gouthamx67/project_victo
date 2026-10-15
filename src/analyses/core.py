@@ -69,6 +69,40 @@ def calculate_serious_case_count(data: NormalizedData) -> AnalysisResult:
 
 
 @register_analysis(
+    metric_id="non_serious_case_count",
+    population="case",
+    version=ANALYSIS_VERSION,
+)
+def calculate_non_serious_case_count(
+    data: NormalizedData,
+) -> AnalysisResult:
+    """Count normalized cases classified as not serious."""
+
+    mask = data.cases["serious"].eq(False)
+
+    supporting_ids = (
+        data.cases.loc[mask, "case_id"]
+        .dropna()
+        .astype(str)
+        .tolist()
+    )
+
+    return AnalysisResult(
+        metric_id="non_serious_case_count",
+        value=len(supporting_ids),
+        definition=(
+            "Number of normalized safety cases whose case-level "
+            "serious classification is False. Cases with unknown "
+            "or missing seriousness are not counted."
+        ),
+        population="case",
+        unit="cases",
+        supporting_ids=supporting_ids,
+        version=ANALYSIS_VERSION,
+    )
+
+
+@register_analysis(
     metric_id="serious_case_percentage",
     population="case",
     version=ANALYSIS_VERSION,
@@ -109,7 +143,7 @@ def calculate_serious_case_percentage(
         definition=(
             "Percentage of normalized safety cases classified as "
             "serious, calculated as serious cases divided by all "
-            "normalized cases multiplied by 100."
+            "normalized cases, expressed as a percentage."
         ),
         population="case",
         unit="case_percentage",
@@ -192,7 +226,8 @@ def calculate_expedited_case_percentage(
         definition=(
             "Percentage of normalized safety cases meeting the "
             "expedited reporting criterion, calculated as expedited "
-            "cases divided by all normalized cases multiplied by 100."
+            "cases divided by all normalized cases, expressed as "
+            "a percentage."
         ),
         population="case",
         unit="case_percentage",
@@ -409,10 +444,11 @@ def calculate_top_reactions(data: NormalizedData) -> AnalysisResult:
         metric_id="top_reactions",
         value=value,
         definition=(
-            "The ten most frequently reported normalized reaction "
-            "Preferred Terms. Occurrences count normalized reaction "
-            "records, while distinct_cases counts unique safetyreportid "
-            "cases containing each Preferred Term. Frequency ties are "
+            "The most frequently reported normalized reaction "
+            "Preferred Terms, returned as a limited top list. "
+            "Occurrences count normalized reaction records, while "
+            "distinct_cases counts unique safetyreportid cases "
+            "containing each Preferred Term. Frequency ties are "
             "resolved alphabetically."
         ),
         population="reaction",

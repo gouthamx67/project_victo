@@ -15,10 +15,12 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from src.analysis_framework import AnalysisResult
+from src.env_loader import load_dotenv_file
 from src.evidence_trace import build_evidence_trace
 from src.llm_provider import (
     LLMGenerationConfig,
     LLMProvider,
+    LLMProviderError,
     build_provider,
 )
 from src.report_config import load_report_config
@@ -48,6 +50,11 @@ from src.run_artifacts import write_run_artifacts
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+# Load local .env configuration (e.g. GROQ_API_KEY) so the backend works
+# without manually exporting variables in the shell. Real environment
+# variables take precedence.
+load_dotenv_file(PROJECT_ROOT / ".env")
 
 DEFAULT_CONFIG_PATH = PROJECT_ROOT / "configs" / "pader.yaml"
 DEFAULT_PROMPT_PATH = PROJECT_ROOT / "prompts" / "sections" / "default.txt"
@@ -548,8 +555,17 @@ async def create_run(
         dataset_path.write_bytes(content)
 
         if use_llm:
-            generation_config = _build_generation_config()
-            provider = _build_llm_provider()
+            try:
+                generation_config = _build_generation_config()
+                provider = _build_llm_provider()
+            except (ValueError, RuntimeError) as exc:
+                raise HTTPException(
+                    status_code=503,
+                    detail=(
+                        "LLM narrative was requested but the provider "
+                        f"is not configured correctly: {exc}"
+                    ),
+                ) from exc
         else:
             generation_config = LLMGenerationConfig(
                 provider="none",
@@ -593,6 +609,22 @@ async def create_run(
             detail=(
                 "The uploaded CSV could not be processed. "
                 "Check its format and contents."
+            ),
+        ) from exc
+
+    except LLMProviderError as exc:
+        _cleanup_failed_run(dataset_path, run_directory)
+        logger.warning(
+            "LLM provider call failed for run %s: %s",
+            run_id,
+            exc,
+        )
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                "LLM narrative generation failed at the provider. "
+                f"{exc} The report was not generated; retry, or "
+                "run without LLM narrative."
             ),
         ) from exc
 

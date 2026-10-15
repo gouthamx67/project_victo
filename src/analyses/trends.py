@@ -384,11 +384,12 @@ def calculate_monthly_top_reactions(
         metric_id="monthly_top_reactions",
         value=value,
         definition=(
-            "Top 10 monthly normalized reaction terms, ordered by "
-            "reaction count descending and reaction term ascending "
-            "for ties. Counts use reaction rows and the associated "
-            "safety case receivedate. Low-count results should be "
-            "interpreted cautiously."
+            "Highest-count monthly normalized reaction terms, "
+            "returned as a limited top list, ordered by reaction "
+            "count descending and reaction term ascending for ties. "
+            "Counts use reaction rows and the associated safety case "
+            "receivedate. Low-count results should be interpreted "
+            "cautiously."
         ),
         population="reaction",
         unit="monthly_reaction_occurrences",
@@ -466,11 +467,10 @@ def calculate_monthly_case_deviations(
             "last observed calendar months are treated as partial months "
             "and excluded from the full-month baseline when more than one "
             "month is present. Eligible full months are flagged when their "
-            "unique case count is greater than "
-            f"{DEVIATION_MULTIPLIER} times the mean case count across "
-            "eligible full months. Partial months remain visible but are "
-            "not flagged. This is not a statistical signal-detection "
-            "method."
+            "unique case count exceeds the review threshold, a fixed "
+            "multiple of the mean case count across eligible full months. "
+            "Partial months remain visible but are not flagged. This is "
+            "not a validated statistical method."
         ),
         population="case",
         unit="monthly_case_deviation",
