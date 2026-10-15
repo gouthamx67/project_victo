@@ -213,6 +213,46 @@ def test_expectedness_claim_is_rejected():
     assert result.actual_valid is False
 
 
+
+def test_unsupported_interpretation_is_rejected():
+    case = EvaluationCase(
+        case_id="unsupported-interpretation",
+        description="Unsupported interpretation of monthly variability.",
+        narrative=(
+            "The pattern reflects typical month-to-month variability."
+        ),
+        expected_valid=False,
+    )
+
+    result = evaluate_case(
+        case,
+        make_analyses(),
+    )
+
+    assert result.passed
+    assert result.actual_valid is False
+
+
+def test_neutral_monthly_description_is_accepted():
+    case = EvaluationCase(
+        case_id="neutral-monthly-description",
+        description="Neutral descriptive wording.",
+        narrative=(
+            "The review found no monthly deviations above "
+            "the configured threshold."
+        ),
+        expected_valid=True,
+    )
+
+    result = evaluate_case(
+        case,
+        make_analyses(),
+    )
+
+    assert result.passed
+    assert result.actual_valid is True
+
+
 def test_suite_reports_all_cases():
     cases = [
         EvaluationCase(
@@ -257,6 +297,23 @@ def test_suite_reports_all_cases():
             ),
             expected_valid=False,
         ),
+        EvaluationCase(
+            case_id="unsupported-interpretation",
+            description="Unsupported interpretation of monthly variability.",
+            narrative=(
+                "The pattern reflects typical month-to-month variability."
+            ),
+            expected_valid=False,
+        ),
+        EvaluationCase(
+            case_id="neutral-monthly-description",
+            description="Neutral descriptive wording.",
+            narrative=(
+                "The review found no monthly deviations above "
+                "the configured threshold."
+            ),
+            expected_valid=True,
+        ),
     ]
 
     results = evaluate_suite(
@@ -264,7 +321,7 @@ def test_suite_reports_all_cases():
         make_analyses(),
     )
 
-    assert len(results) == 5
+    assert len(results) == 7
 
     assert all(
         result.passed

@@ -96,6 +96,28 @@ def causal_claim_detected() -> bool:
     return not validation.valid
 
 
+
+def unsupported_interpretation_detected() -> bool:
+    result = AnalysisResult(
+        metric_id="monthly_review",
+        value="No monthly deviations above the configured threshold.",
+        definition="Configured monthly deviation review result.",
+        population="case",
+        supporting_ids=[],
+        version="1.0.0",
+    )
+
+    validation = validate_grounding(
+        "The pattern reflects typical month-to-month variability.",
+        [result],
+    )
+
+    return any(
+        issue.code == "unsupported_interpretation"
+        for issue in validation.issues
+    )
+
+
 def safety_signal_claim_detected() -> bool:
     result = AnalysisResult(
         metric_id="case_count",
@@ -145,6 +167,14 @@ MUTATION_CASES = [
             "Introduce unsupported causal language."
         ),
         check=causal_claim_detected,
+    ),
+    MutationCase(
+        mutation_id="unsupported_interpretation",
+        description=(
+            "Introduce an interpretation of monthly variability "
+            "that is not supported by the descriptive review result."
+        ),
+        check=unsupported_interpretation_detected,
     ),
     MutationCase(
         mutation_id="safety_signal_claim",
