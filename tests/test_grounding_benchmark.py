@@ -53,10 +53,10 @@ def test_empty_benchmark_has_defined_empty_metrics() -> None:
 def test_grounding_benchmark_cases_all_pass() -> None:
     metrics, results = run_benchmark()
 
-    assert metrics.total == 20
+    assert metrics.total == 23
     assert metrics.passed == metrics.total
     assert metrics.true_positive == 4
-    assert metrics.true_negative == 16
+    assert metrics.true_negative == 19
     assert metrics.false_positive == 0
     assert metrics.false_negative == 0
     assert metrics.invalid_acceptance_rate == 0.0

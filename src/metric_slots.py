@@ -53,29 +53,40 @@ def find_metric_slots(text: str) -> list[str]:
 
 def _find_invalid_brace_expressions(text: str) -> list[str]:
     """
-    Find brace expressions that are not valid metric slots.
+    Find invalid, nested, or unmatched brace expressions.
 
-    For example:
-
-        {case_count + 1}
-        {some expression}
-        {123 + 456}
-
-    are invalid.
-
-    Valid slots such as {case_count} are ignored.
+    A brace expression is valid only when its complete contents match
+    the metric-slot identifier syntax. Nested and unbalanced braces are
+    rejected rather than treating an inner slot as a valid expression.
     """
     invalid: list[str] = []
+    depth = 0
+    expression_start: int | None = None
 
-    for match in BRACE_PATTERN.finditer(text):
-        full_expression = match.group(0)
-        contents = match.group(1)
+    for index, character in enumerate(text):
+        if character == "{":
+            if depth == 0:
+                expression_start = index
+            depth += 1
+            continue
 
-        if not re.fullmatch(
-            r"[A-Za-z0-9_.-]+",
-            contents,
-        ):
-            invalid.append(full_expression)
+        if character != "}":
+            continue
+
+        if depth == 0:
+            invalid.append("}")
+            continue
+
+        depth -= 1
+        if depth == 0 and expression_start is not None:
+            expression = text[expression_start:index + 1]
+            contents = expression[1:-1]
+            if not re.fullmatch(r"[A-Za-z0-9_.-]+", contents):
+                invalid.append(expression)
+            expression_start = None
+
+    if depth and expression_start is not None:
+        invalid.append(text[expression_start:])
 
     return invalid
 

@@ -73,21 +73,34 @@ def test_valid_grounded_narrative_is_accepted():
     assert result.actual_valid is True
 
 
-def test_approved_nested_metric_number_is_accepted():
+def test_approved_nested_metric_number_requires_slot():
     case = EvaluationCase(
-        case_id="nested-approved-number",
-        description="Number contained in an approved metric value.",
+        case_id="nested-approved-number-without-slot",
+        description=(
+            "A number inside approved evidence must still use its metric slot."
+        ),
         narrative=(
             "Acute kidney injury was reported "
             "22 times among the top reactions."
         ),
+        expected_valid=False,
+    )
+
+    result = evaluate_case(case, make_analyses())
+
+    assert result.passed
+    assert result.actual_valid is False
+
+
+def test_nested_metric_is_accepted_through_approved_slot():
+    case = EvaluationCase(
+        case_id="nested-approved-number-with-slot",
+        description="Approved nested metric referenced through its slot.",
+        narrative="The top reactions are {top_reactions}.",
         expected_valid=True,
     )
 
-    result = evaluate_case(
-        case,
-        make_analyses(),
-    )
+    result = evaluate_case(case, make_analyses())
 
     assert result.passed
     assert result.actual_valid is True

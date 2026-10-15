@@ -1,7 +1,6 @@
 from pathlib import Path
 
 import pandas as pd
-import pytest
 
 from src.ingest import (
     REQUIRED_COLUMNS,
@@ -152,24 +151,15 @@ def test_categorical_values_are_not_silently_normalized():
     assert categorical["patient_patientsex"] == ["CustomSex"]
 
 
-def test_real_dataset_if_present():
-    """
-    Optional integration test.
-
-    This test is skipped unless the challenge CSV exists locally.
-    It verifies only structural facts established by CP1.
-    """
-    csv_path = Path(
-        "data/Bisoprolol_icsr_sample_1068rows (1).csv"
-    )
-
-    if not csv_path.exists():
-        pytest.skip("Challenge CSV not present in test environment.")
+def test_synthetic_csv_file_is_loaded_and_validated(tmp_path: Path):
+    source = make_minimal_dataframe()
+    csv_path = tmp_path / "synthetic_ingest.csv"
+    source.to_csv(csv_path, index=False)
 
     df, report = ingest_and_validate(csv_path)
 
-    assert report.is_valid
-    assert len(df) == 1068
-    assert df["safetyreportid"].nunique() == 1024
+    assert report.is_valid, report.summary()
+    assert len(df) == 1
+    assert df["safetyreportid"].nunique() == 1
     assert report.observations["receivedate_min"] == "2024-12-27"
-    assert report.observations["receivedate_max"] == "2025-12-26"
+    assert report.observations["receivedate_max"] == "2024-12-27"

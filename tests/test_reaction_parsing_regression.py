@@ -1,4 +1,4 @@
-from pathlib import Path
+from __future__ import annotations
 
 import pandas as pd
 import pytest
@@ -12,212 +12,155 @@ from src.normalize import (
 )
 
 
-ROOT = Path(__file__).resolve().parents[1]
+def make_raw(rows, *, include_version=True) -> pd.DataFrame:
+    """Build small synthetic reaction rows without external datasets."""
+    data = {
+        "safetyreportid": [row[0] for row in rows],
+        REACTION_PT_COLUMN: [row[1] for row in rows],
+        REACTION_OUTCOME_COLUMN: [row[2] for row in rows],
+    }
+    if include_version:
+        data[REACTION_VERSION_COLUMN] = [row[3] for row in rows]
+    return pd.DataFrame(data)
 
-CSV_PATH = ROOT / "data" / "Bisoprolol_icsr_sample_1068rows (1).csv"
 
-pytestmark = pytest.mark.skipif(
-    not CSV_PATH.exists(),
-    reason="Requires the local ignored challenge CSV for exact parser regressions.",
-)
-
-CASE_COLUMN = "safetyreportid"
-
-
-def _load_raw() -> pd.DataFrame:
-    return pd.read_csv(
-        CSV_PATH,
-        dtype=str,
-        keep_default_na=False,
+def test_single_reaction_is_aligned():
+    result = normalize_reactions(
+        make_raw([("900001", "Headache", "1", "27.0")])
     )
 
-
-def test_raw_pt_token_count_is_3648():
-    raw = _load_raw()
-
-    total = 0
-
-    for value in raw[REACTION_PT_COLUMN]:
-        text = str(value).strip()
-
-        if text:
-            total += len(
-                [
-                    token.strip()
-                    for token in text.split(",")
-                    if token.strip()
-                ]
-            )
-
-    assert total == 3648
+    assert len(result) == 1
+    assert result.iloc[0]["case_id"] == "900001"
+    assert result.iloc[0]["reaction_pt"] == "Headache"
+    assert result.iloc[0]["outcome"] == "1"
+    assert result.iloc[0]["meddra_version"] == "27.0"
+    assert result.iloc[0]["outcome_alignment_status"] == "aligned"
 
 
-def test_raw_outcome_token_count_is_3642():
-    raw = _load_raw()
-
-    total = 0
-
-    for value in raw[REACTION_OUTCOME_COLUMN]:
-        text = str(value).strip()
-
-        if text:
-            total += len(
-                [
-                    token.strip()
-                    for token in text.split(",")
-                    if token.strip()
-                ]
-            )
-
-    assert total == 3642
-
-
-def test_raw_version_token_count_is_3642():
-    raw = _load_raw()
-
-    total = 0
-
-    for value in raw[REACTION_VERSION_COLUMN]:
-        text = str(value).strip()
-
-        if text:
-            total += len(
-                [
-                    token.strip()
-                    for token in text.split(",")
-                    if token.strip()
-                ]
-            )
-
-    assert total == 3642
-
-
-def test_normalized_reaction_count_is_3642():
-    reactions = normalize_reactions(_load_raw())
-
-    assert len(reactions) == 3642
-
-
-def test_every_normalized_reaction_is_aligned():
-    reactions = normalize_reactions(_load_raw())
-
-    assert (
-        reactions["reaction_alignment_status"]
-        .eq("aligned")
-        .all()
-    )
-
-    assert (
-        reactions[REACTION_PT_COLUMN]
-        .notna()
-        .all()
-    )
-
-    assert (
-        reactions[REACTION_OUTCOME_COLUMN]
-        .notna()
-        .all()
-    )
-
-    assert (
-        reactions[REACTION_VERSION_COLUMN]
-        .notna()
-        .all()
-    )
-
-
-def test_no_fragment_pts_are_present():
-    reactions = normalize_reactions(_load_raw())
-
-    values = set(
-        reactions[REACTION_PT_COLUMN]
-        .astype(str)
-        .str.strip()
-    )
-
-    assert "visual" not in values
-    assert "auditory" not in values
-    assert "mixed" not in values
-
-
-def test_embedded_comma_pts_are_preserved():
-    reactions = normalize_reactions(_load_raw())
-
-    values = set(
-        reactions[REACTION_PT_COLUMN]
-        .astype(str)
-        .str.strip()
-    )
-
-    assert EMBEDDED_COMMA_PTS.issubset(values)
-
-
-def test_exactly_six_source_rows_require_reconstruction():
-    raw = _load_raw()
-
-    affected_rows = 0
-
-    for _, row in raw.iterrows():
-        pt_tokens = [
-            token.strip()
-            for token in str(row[REACTION_PT_COLUMN]).split(",")
-            if token.strip()
-        ]
-
-        outcome_tokens = [
-            token.strip()
-            for token in str(row[REACTION_OUTCOME_COLUMN]).split(",")
-            if token.strip()
-        ]
-
-        version_tokens = [
-            token.strip()
-            for token in str(row[REACTION_VERSION_COLUMN]).split(",")
-            if token.strip()
-        ]
-
-        if (
-            len(pt_tokens) != len(outcome_tokens)
-            or len(pt_tokens) != len(version_tokens)
-        ):
-            affected_rows += 1
-
-    assert affected_rows == 6
-
-
-def test_exactly_six_embedded_comma_reactions_are_reconstructed():
-    reactions = normalize_reactions(_load_raw())
-
-    reconstructed = reactions[
-        reactions["pt_reconstruction_status"]
-        .eq("reconstructed_embedded_comma")
+def test_all_verified_embedded_comma_terms_are_reconstructed():
+    rows = [
+        ("900001", term, "1", "27.0")
+        for term in sorted(EMBEDDED_COMMA_PTS)
     ]
 
-    assert len(reconstructed) == 6
+    result = normalize_reactions(make_raw(rows))
+
+    assert set(result["reaction_pt"]) == EMBEDDED_COMMA_PTS
+    assert len(result) == len(EMBEDDED_COMMA_PTS)
+    assert result["pt_reconstruction_status"].eq(
+        "reconstructed_embedded_comma"
+    ).all()
 
 
-def test_reconstructed_pts_are_exactly_the_verified_embedded_comma_pts():
-    reactions = normalize_reactions(_load_raw())
-
-    reconstructed = reactions.loc[
-        reactions["pt_reconstruction_status"]
-        .eq("reconstructed_embedded_comma"),
-        REACTION_PT_COLUMN,
+def test_fragment_words_alone_are_not_reconstructed():
+    terms = ["visual", "auditory", "mixed"]
+    rows = [
+        ("900001", term, "1", "27.0")
+        for term in terms
     ]
 
-    assert set(reconstructed) == EMBEDDED_COMMA_PTS
+    result = normalize_reactions(make_raw(rows))
+
+    assert set(result["reaction_pt"]) == set(terms)
+    assert result["pt_reconstruction_status"].eq("no_reconstruction").all()
 
 
-def test_non_reconstructed_pts_have_zero_reconstruction_count():
-    reactions = normalize_reactions(_load_raw())
-
-    normal = reactions[
-        reactions["pt_reconstruction_status"]
-        .eq("no_reconstruction")
-    ]
-
-    assert (
-        normal["pt_reconstruction_count"]
-        .eq(0)
-        .all()
+def test_comma_delimited_fields_align_positionally():
+    result = normalize_reactions(
+        make_raw([
+            ("900001", "Headache, Nausea", "1, 2", "27.0, 27.0")
+        ])
     )
+
+    assert result["reaction_pt"].tolist() == ["Headache", "Nausea"]
+    assert result["outcome"].tolist() == ["1", "2"]
+    assert result["meddra_version"].tolist() == ["27.0", "27.0"]
+    assert result["outcome_alignment_status"].eq("aligned").all()
+
+
+def test_missing_outcomes_are_not_invented():
+    result = normalize_reactions(
+        make_raw([
+            ("900001", "Headache, Nausea", "1", "27.0, 27.0")
+        ])
+    )
+
+    assert len(result) == 2
+    assert result.iloc[0]["outcome"] == "1"
+    assert pd.isna(result.iloc[1]["outcome"])
+    assert result.iloc[1]["outcome_present"] == False
+    assert (
+        result.iloc[1]["outcome_alignment_status"]
+        == "missing_source_outcome"
+    )
+
+
+def test_extra_outcomes_are_flagged():
+    result = normalize_reactions(
+        make_raw([("900001", "Headache", "1, 2", "27.0")])
+    )
+
+    assert len(result) == 1
+    assert (
+        result.iloc[0]["outcome_alignment_status"]
+        == "extra_source_outcome"
+    )
+
+
+def test_missing_meddra_version_is_not_invented():
+    result = normalize_reactions(
+        make_raw(
+            [("900001", "Headache", "1", "")],
+            include_version=False,
+        )
+    )
+
+    assert len(result) == 1
+    assert pd.isna(result.iloc[0]["meddra_version"])
+    assert not result.iloc[0]["meddra_version_present"]
+
+
+def test_blank_tokens_do_not_create_phantom_reactions():
+    result = normalize_reactions(
+        make_raw([
+            ("900001", "Headache, , Nausea", "1,,2", "27.0,,27.0")
+        ])
+    )
+
+    assert result["reaction_pt"].tolist() == ["Headache", "Nausea"]
+    assert result["reaction_pt"].astype(str).str.strip().ne("").all()
+    assert result["outcome"].tolist() == ["1", "2"]
+
+
+def test_reaction_ids_are_unique_across_rows_for_same_case():
+    result = normalize_reactions(
+        make_raw([
+            ("900001", "Headache", "1", "27.0"),
+            ("900001", "Nausea", "2", "27.0"),
+        ])
+    )
+
+    assert len(result) == 2
+    assert result["case_id"].eq("900001").all()
+    assert result["reaction_id"].is_unique
+    assert result["source_row_index"].tolist() == [0, 1]
+
+
+def test_missing_case_identifier_is_rejected():
+    with pytest.raises(ValueError, match="Missing safetyreportid"):
+        normalize_reactions(
+            make_raw([(None, "Headache", "1", "27.0")])
+        )
+
+
+def test_missing_required_reaction_column_is_rejected():
+    frame = pd.DataFrame({
+        "safetyreportid": ["900001"],
+        REACTION_PT_COLUMN: ["Headache"],
+    })
+
+    with pytest.raises(
+        ValueError,
+        match="Missing required reaction columns",
+    ):
+        normalize_reactions(frame)

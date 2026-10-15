@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
+import re
+import shutil
 import uuid
 from pathlib import Path
 from typing import Any, Literal
@@ -20,6 +23,7 @@ from src.llm_provider import (
 )
 from src.report_config import load_report_config
 from src.report_pipeline import (
+    DatasetInputError,
     PipelineSection,
     ReportPipelineResult,
     ReportStatus,
@@ -50,6 +54,36 @@ DEFAULT_PROMPT_PATH = PROJECT_ROOT / "prompts" / "sections" / "default.txt"
 DEFAULT_TEMPLATE_PATH = PROJECT_ROOT / "prompts" / "report_template.html"
 
 API_OUTPUT_ROOT = PROJECT_ROOT / "outputs" / "api_runs"
+
+# This is a conservative default for the local prototype. Deployments
+# should also enforce request-size limits at the reverse proxy.
+MAX_UPLOAD_BYTES = 25 * 1024 * 1024
+
+RUN_ID_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}\Z")
+
+
+logger = logging.getLogger(__name__)
+
+
+def _cleanup_failed_run(dataset_path: Path, run_directory: Path) -> None:
+    """Best-effort cleanup of upload and partial artifacts after a failure."""
+    try:
+        dataset_path.unlink(missing_ok=True)
+    except OSError as exc:
+        logger.warning(
+            "Temporary upload cleanup failed (%s).",
+            type(exc).__name__,
+        )
+
+    # These directories are based on a server-generated UUID, not user input.
+    if run_directory.is_dir() and not run_directory.is_symlink():
+        try:
+            shutil.rmtree(run_directory)
+        except OSError as exc:
+            logger.warning(
+                "Failed-run artifact cleanup failed (%s).",
+                type(exc).__name__,
+            )
 
 
 class ReviewActionRequest(BaseModel):
@@ -89,7 +123,34 @@ app.add_middleware(
 
 
 def _run_directory(run_id: str) -> Path:
-    return API_OUTPUT_ROOT / run_id
+    # Run IDs are generated as UUID hex strings. Keeping the accepted
+    # alphabet narrow prevents path separators and traversal components.
+    if not RUN_ID_PATTERN.fullmatch(run_id):
+        raise HTTPException(
+            status_code=404,
+            detail="Run was not found.",
+        )
+
+    output_root = API_OUTPUT_ROOT.resolve()
+    unresolved_run_directory = output_root / run_id
+
+    # Reject symlink aliases even when their targets remain inside output_root.
+    if unresolved_run_directory.is_symlink():
+        raise HTTPException(
+            status_code=404,
+            detail="Run was not found.",
+        )
+
+    run_directory = unresolved_run_directory.resolve()
+
+    # Defense in depth: reject paths escaping the output directory.
+    if output_root not in run_directory.parents:
+        raise HTTPException(
+            status_code=404,
+            detail="Run was not found.",
+        )
+
+    return run_directory
 
 
 def _require_run(run_id: str) -> Path:
@@ -117,7 +178,7 @@ def _read_json(path: Path) -> Any:
                 encoding="utf-8",
             )
         )
-    except json.JSONDecodeError as exc:
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
         raise HTTPException(
             status_code=500,
             detail=f"Artifact '{path.name}' is invalid JSON.",
@@ -177,9 +238,10 @@ def _load_review_set_for_run(
     try:
         return load_review_set(review_path)
     except Exception as exc:
+        logger.exception("Review artifact validation failed.")
         raise HTTPException(
             status_code=500,
-            detail=f"Review artifact is invalid: {exc}",
+            detail="Review artifact is invalid.",
         ) from exc
 
 
@@ -187,9 +249,10 @@ def _load_report_config():
     try:
         return load_report_config(DEFAULT_CONFIG_PATH)
     except Exception as exc:
+        logger.exception("Report configuration loading failed.")
         raise HTTPException(
             status_code=500,
-            detail=f"Report configuration is invalid: {exc}",
+            detail="Report configuration could not be loaded.",
         ) from exc
 
 
@@ -212,9 +275,10 @@ def _load_analysis_results(
             for item in payload
         ]
     except Exception as exc:
+        logger.exception("Analysis artifact validation failed.")
         raise HTTPException(
             status_code=500,
-            detail=f"Analysis artifact is invalid: {exc}",
+            detail="Analysis artifact is invalid.",
         ) from exc
 
 
@@ -429,10 +493,10 @@ def health() -> dict[str, str]:
 
 @app.post("/runs", status_code=201)
 async def create_run(
-    file: UploadFile = File(...),
+    file: UploadFile | None = File(None),
     use_llm: bool = Form(False),
 ) -> dict[str, Any]:
-    if not file.filename:
+    if file is None or not file.filename:
         raise HTTPException(
             status_code=400,
             detail="A CSV file is required.",
@@ -459,9 +523,21 @@ async def create_run(
     )
 
     dataset_path = input_directory / f"{run_id}.csv"
+    run_directory = API_OUTPUT_ROOT / run_id
 
     try:
-        content = await file.read()
+        # Read at most one byte over the limit so an oversized upload
+        # is rejected without loading the full file into memory.
+        content = await file.read(MAX_UPLOAD_BYTES + 1)
+
+        if len(content) > MAX_UPLOAD_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail=(
+                    "CSV upload exceeds the maximum permitted size "
+                    f"of {MAX_UPLOAD_BYTES} bytes."
+                ),
+            )
 
         if not content:
             raise HTTPException(
@@ -503,15 +579,29 @@ async def create_run(
         )
 
     except HTTPException:
+        _cleanup_failed_run(dataset_path, run_directory)
         raise
 
-    except Exception as exc:
-        if dataset_path.exists():
-            dataset_path.unlink()
-
+    except DatasetInputError as exc:
+        _cleanup_failed_run(dataset_path, run_directory)
+        logger.info(
+            "Uploaded CSV could not be processed (%s).",
+            type(exc).__name__,
+        )
         raise HTTPException(
             status_code=400,
-            detail=str(exc),
+            detail=(
+                "The uploaded CSV could not be processed. "
+                "Check its format and contents."
+            ),
+        ) from exc
+
+    except Exception as exc:
+        _cleanup_failed_run(dataset_path, run_directory)
+        logger.exception("Report generation failed for run %s.", run_id)
+        raise HTTPException(
+            status_code=500,
+            detail="Report generation failed. Check server logs.",
         ) from exc
 
     return {
@@ -520,7 +610,6 @@ async def create_run(
         "report_id": result.config.report.id,
         "report_version": result.config.report.version,
         "llm_enabled": use_llm,
-        "artifact_directory": str(run_directory),
     }
 
 

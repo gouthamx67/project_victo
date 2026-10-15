@@ -50,6 +50,26 @@ def build_cases() -> list[EvaluationCase]:
             required_metric_ids=("case_count",),
         ),
         EvaluationCase(
+            case_id="invalid_approved_number_outside_slot",
+            description=(
+                "An approved number must still be referenced through its slot."
+            ),
+            narrative="The report recorded 1024 cases.",
+            expected_valid=False,
+        ),
+        EvaluationCase(
+            case_id="invalid_spelled_out_number",
+            description="A spelled-out quantity must use a metric slot.",
+            narrative="The dataset contained one thousand cases.",
+            expected_valid=False,
+        ),
+        EvaluationCase(
+            case_id="invalid_unicode_digits",
+            description="Unicode decimal digits outside slots are rejected.",
+            narrative="The dataset contained １２３ cases.",
+            expected_valid=False,
+        ),
+        EvaluationCase(
             case_id="invalid_unknown_slot",
             description="Unknown metric slot.",
             narrative="The dataset contains {unknown_metric} cases.",

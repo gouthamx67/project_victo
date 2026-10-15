@@ -1,7 +1,13 @@
 # tests/test_report_pipeline.py
 import json
+
+import pytest
+
 from src.analysis_framework import AnalysisResult
-from src.report_pipeline import _analysis_to_metric_context
+from src.report_pipeline import (
+    DatasetInputError,
+    _analysis_to_metric_context,
+)
 
 from pathlib import Path
 
@@ -190,3 +196,56 @@ def test_llm_prompt_size_does_not_scale_with_supporting_case_ids():
 
     assert len(serialized) < 5000
     assert "CASE-9999" not in serialized
+
+
+def test_pipeline_invalid_dataset_raises_dataset_input_error(
+    tmp_path: Path,
+):
+    csv_path = tmp_path / "invalid.csv"
+    csv_path.write_text("unexpected\nvalue\n", encoding="utf-8")
+
+    with pytest.raises(DatasetInputError):
+        run_report_pipeline(
+            csv_path=csv_path,
+            config_path=CONFIG,
+            prompt_path=PROMPT,
+            use_llm=False,
+        )
+
+
+def test_pipeline_missing_dataset_raises_file_not_found(tmp_path: Path):
+    with pytest.raises(FileNotFoundError):
+        run_report_pipeline(
+            csv_path=tmp_path / "missing.csv",
+            config_path=CONFIG,
+            prompt_path=PROMPT,
+            use_llm=False,
+        )
+
+
+def test_pipeline_wraps_ingestion_value_error(
+    monkeypatch,
+):
+    import src.ingest
+
+    def fail_ingestion(_path):
+        raise ValueError("synthetic parser error")
+
+    monkeypatch.setattr(
+        src.ingest,
+        "ingest_and_validate",
+        fail_ingestion,
+    )
+
+    with pytest.raises(
+        DatasetInputError,
+        match="Uploaded CSV could not be parsed or validated",
+    ) as exc_info:
+        run_report_pipeline(
+            csv_path=DATASET,
+            config_path=CONFIG,
+            prompt_path=PROMPT,
+            use_llm=False,
+        )
+
+    assert isinstance(exc_info.value.__cause__, ValueError)

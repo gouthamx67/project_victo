@@ -56,7 +56,7 @@ uses explicit `%Y%m%d` parsing.
 
 ### Decision: Case identity is safetyreportid
 
-The dataset contains 1,068 rows and 1,024 unique safetyreportid values.
+Input CSVs may contain multiple rows per `safetyreportid`, so row-level counts must be distinguished from case-level counts. Public examples use synthetic data; restricted evaluation CSVs and their record counts should not be documented.
 
 Therefore:
 - row-level analysis must not be confused with case-level analysis;

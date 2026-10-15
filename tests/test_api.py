@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 import src.api as api
@@ -186,6 +188,60 @@ def test_create_run(monkeypatch, tmp_path: Path):
 
     assert payload["status"] == "DRAFT"
     assert "run_id" in payload
+    assert "artifact_directory" not in payload
+    assert str(tmp_path) not in response.text
+
+
+def test_create_run_failure_cleans_partial_artifacts(
+    monkeypatch,
+    tmp_path: Path,
+):
+    output_root = tmp_path / "outputs"
+    monkeypatch.setattr(api, "API_OUTPUT_ROOT", output_root)
+    monkeypatch.setattr(
+        api,
+        "run_report_pipeline",
+        lambda **kwargs: _fake_result(),
+    )
+
+    def fail_after_partial_write(**kwargs):
+        partial_dir = kwargs["output_root"] / kwargs["run_id"]
+        partial_dir.mkdir(parents=True)
+        (partial_dir / "partial.json").write_text(
+            "{}",
+            encoding="utf-8",
+        )
+        raise RuntimeError(
+            f"Internal failure at {tmp_path}/private/path"
+        )
+
+    monkeypatch.setattr(
+        api,
+        "write_run_artifacts",
+        fail_after_partial_write,
+    )
+
+    response = client.post(
+        "/runs",
+        files={
+            "file": (
+                DATASET.name,
+                DATASET.read_bytes(),
+                "text/csv",
+            )
+        },
+    )
+
+    assert response.status_code == 500
+    assert "private/path" not in response.text
+    assert str(tmp_path) not in response.text
+
+    input_dir = output_root / "_inputs"
+    assert not list(input_dir.glob("*.csv"))
+    assert not [
+        path for path in output_root.iterdir()
+        if path.is_dir() and path.name != "_inputs"
+    ]
 
 
 def test_get_run(monkeypatch, tmp_path: Path):
@@ -572,3 +628,400 @@ def test_finalize_approved_run_returns_final(
     )
 
     assert "FINAL — HUMAN REVIEW APPROVED" in report_html
+
+
+def test_cleanup_logs_run_directory_removal_failure(
+    monkeypatch,
+    tmp_path: Path,
+    caplog,
+):
+    dataset_path = tmp_path / "_inputs" / "upload.csv"
+    dataset_path.parent.mkdir(parents=True)
+    dataset_path.write_text("synthetic upload", encoding="utf-8")
+
+    run_directory = tmp_path / "outputs" / "run-test"
+    run_directory.mkdir(parents=True)
+    (run_directory / "partial.json").write_text(
+        "{}",
+        encoding="utf-8",
+    )
+
+    def fail_rmtree(_path):
+        raise PermissionError("synthetic deletion failure")
+
+    monkeypatch.setattr(api.shutil, "rmtree", fail_rmtree)
+
+    api._cleanup_failed_run(dataset_path, run_directory)
+
+    assert not dataset_path.exists()
+    assert run_directory.exists()
+    assert "Failed-run artifact cleanup failed (PermissionError)." in caplog.text
+    assert "synthetic deletion failure" not in caplog.text
+
+
+@pytest.mark.parametrize(
+    "run_id",
+    [
+        "",
+        ".",
+        "..",
+        "../outside",
+        "../../etc/passwd",
+        "/tmp/outside",
+        "nested/run",
+        "nested\\\\run",
+        "%2e%2e",
+    ],
+)
+def test_run_directory_rejects_unsafe_path_components(
+    monkeypatch,
+    tmp_path: Path,
+    run_id: str,
+):
+    monkeypatch.setattr(
+        api,
+        "API_OUTPUT_ROOT",
+        tmp_path / "outputs",
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        api._run_directory(run_id)
+
+    assert exc_info.value.status_code == 404
+
+
+def test_create_run_rejects_oversized_upload(
+    monkeypatch,
+    tmp_path: Path,
+):
+    monkeypatch.setattr(
+        api,
+        "API_OUTPUT_ROOT",
+        tmp_path / "outputs",
+    )
+    monkeypatch.setattr(api, "MAX_UPLOAD_BYTES", 10)
+
+    response = client.post(
+        "/runs",
+        files={
+            "file": (
+                "synthetic.csv",
+                b"x" * 11,
+                "text/csv",
+            )
+        },
+    )
+
+    assert response.status_code == 413
+    assert not list(
+        (tmp_path / "outputs" / "_inputs").glob("*.csv")
+    )
+
+
+def test_create_run_invalid_csv_returns_generic_400(
+    monkeypatch,
+    tmp_path: Path,
+):
+    output_root = tmp_path / "outputs"
+    monkeypatch.setattr(api, "API_OUTPUT_ROOT", output_root)
+
+    response = client.post(
+        "/runs",
+        files={
+            "file": (
+                "invalid.csv",
+                b"not,a,valid\n1,2,3\n",
+                "text/csv",
+            )
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == (
+        "The uploaded CSV could not be processed. "
+        "Check its format and contents."
+    )
+    assert str(tmp_path) not in response.text
+    assert not list((output_root / "_inputs").glob("*.csv"))
+
+
+def test_create_run_internal_value_error_returns_500(
+    monkeypatch,
+    tmp_path: Path,
+):
+    output_root = tmp_path / "outputs"
+    monkeypatch.setattr(api, "API_OUTPUT_ROOT", output_root)
+
+    def fail_internally(**kwargs):
+        raise ValueError(f"Internal failure at {tmp_path}/private/path")
+
+    monkeypatch.setattr(api, "run_report_pipeline", fail_internally)
+
+    response = client.post(
+        "/runs",
+        files={
+            "file": (
+                DATASET.name,
+                DATASET.read_bytes(),
+                "text/csv",
+            )
+        },
+    )
+
+    assert response.status_code == 500
+    assert "private/path" not in response.text
+    assert str(tmp_path) not in response.text
+    assert not list((output_root / "_inputs").glob("*.csv"))
+
+
+def test_run_directory_rejects_symlink_escape(
+    monkeypatch,
+    tmp_path: Path,
+):
+    output_root = tmp_path / "outputs"
+    outside = tmp_path / "outside"
+    output_root.mkdir()
+    outside.mkdir()
+    (output_root / "safe-run").symlink_to(
+        outside,
+        target_is_directory=True,
+    )
+    monkeypatch.setattr(api, "API_OUTPUT_ROOT", output_root)
+
+    with pytest.raises(HTTPException) as exc_info:
+        api._run_directory("safe-run")
+
+    assert exc_info.value.status_code == 404
+
+
+def test_run_directory_rejects_internal_symlink_alias(
+    monkeypatch,
+    tmp_path: Path,
+):
+    output_root = tmp_path / "outputs"
+    existing_run = output_root / "existing-run"
+    existing_run.mkdir(parents=True)
+
+    (output_root / "alias-run").symlink_to(
+        existing_run,
+        target_is_directory=True,
+    )
+    monkeypatch.setattr(api, "API_OUTPUT_ROOT", output_root)
+
+    with pytest.raises(HTTPException) as exc_info:
+        api._run_directory("alias-run")
+
+    assert exc_info.value.status_code == 404
+
+
+def test_read_json_missing_artifact_returns_404(tmp_path: Path):
+    with pytest.raises(HTTPException) as exc_info:
+        api._read_json(tmp_path / "missing.json")
+
+    assert exc_info.value.status_code == 404
+
+
+def test_read_json_malformed_json_returns_controlled_500(tmp_path: Path):
+    artifact = tmp_path / "artifact.json"
+    artifact.write_text("{invalid", encoding="utf-8")
+
+    with pytest.raises(HTTPException) as exc_info:
+        api._read_json(artifact)
+
+    assert exc_info.value.status_code == 500
+    assert exc_info.value.detail == "Artifact 'artifact.json' is invalid JSON."
+
+
+def test_read_json_invalid_utf8_returns_controlled_500(tmp_path: Path):
+    artifact = tmp_path / "artifact.json"
+    artifact.write_bytes(b"\xff\xfe\xfa")
+
+    with pytest.raises(HTTPException) as exc_info:
+        api._read_json(artifact)
+
+    assert exc_info.value.status_code == 500
+    assert exc_info.value.detail == "Artifact 'artifact.json' is invalid JSON."
+
+
+@pytest.mark.parametrize(
+    ("filename", "content", "expected_detail"),
+    [
+        ("notes.txt", b"not csv", "Only CSV files are accepted."),
+    ],
+)
+def test_create_run_rejects_invalid_filename(
+    monkeypatch,
+    tmp_path: Path,
+    filename: str,
+    content: bytes,
+    expected_detail: str,
+):
+    output_root = tmp_path / "outputs"
+    monkeypatch.setattr(api, "API_OUTPUT_ROOT", output_root)
+
+    response = client.post(
+        "/runs",
+        files={"file": (filename, content, "text/csv")},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == expected_detail
+    assert not list((output_root / "_inputs").glob("*.csv"))
+
+
+def test_create_run_rejects_empty_upload(
+    monkeypatch,
+    tmp_path: Path,
+):
+    output_root = tmp_path / "outputs"
+    monkeypatch.setattr(api, "API_OUTPUT_ROOT", output_root)
+
+    response = client.post(
+        "/runs",
+        files={"file": ("empty.csv", b"", "text/csv")},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "The uploaded CSV file is empty."
+    assert not list((output_root / "_inputs").glob("*.csv"))
+
+
+def test_create_run_without_file_returns_400(
+    monkeypatch,
+    tmp_path: Path,
+):
+    output_root = tmp_path / "outputs"
+    monkeypatch.setattr(api, "API_OUTPUT_ROOT", output_root)
+
+    response = client.post("/runs")
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "A CSV file is required."
+    assert not list((output_root / "_inputs").glob("*.csv"))
+
+
+def test_missing_run_returns_404(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(api, "API_OUTPUT_ROOT", tmp_path / "outputs")
+
+    response = client.get("/runs/missingrun123")
+
+    assert response.status_code == 404
+
+
+def test_report_endpoint_returns_404_when_artifact_missing(
+    monkeypatch,
+    tmp_path: Path,
+):
+    output_root = tmp_path / "outputs"
+    run_id = "missingreport123"
+    (output_root / run_id).mkdir(parents=True)
+    monkeypatch.setattr(api, "API_OUTPUT_ROOT", output_root)
+
+    response = client.get(f"/runs/{run_id}/report")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Report artifact was not found."
+
+
+def test_manifest_endpoint_returns_controlled_500_for_corrupt_json(
+    monkeypatch,
+    tmp_path: Path,
+):
+    output_root = tmp_path / "outputs"
+    run_id = "badmanifest123"
+    run_directory = output_root / run_id
+    run_directory.mkdir(parents=True)
+    (run_directory / "manifest.json").write_text(
+        "{invalid",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(api, "API_OUTPUT_ROOT", output_root)
+
+    response = client.get(f"/runs/{run_id}/manifest")
+
+    assert response.status_code == 500
+    assert response.json()["detail"] == (
+        "Artifact 'manifest.json' is invalid JSON."
+    )
+    assert str(tmp_path) not in response.text
+
+
+def test_narratives_endpoint_rejects_non_object_json(
+    monkeypatch,
+    tmp_path: Path,
+):
+    output_root = tmp_path / "outputs"
+    run_id = "badnarratives123"
+    run_directory = output_root / run_id
+    run_directory.mkdir(parents=True)
+    (run_directory / "narratives.json").write_text(
+        "[]",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(api, "API_OUTPUT_ROOT", output_root)
+
+    response = client.get(f"/runs/{run_id}/narratives")
+
+    assert response.status_code == 500
+    assert response.json()["detail"] == (
+        "Narrative artifact must contain a JSON object."
+    )
+    assert str(tmp_path) not in response.text
+
+
+def test_build_generation_config_defaults_to_groq(monkeypatch):
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+    monkeypatch.delenv("GROQ_MODEL", raising=False)
+    monkeypatch.delenv("OPENAI_MODEL", raising=False)
+
+    config = api._build_generation_config()
+
+    assert config.provider == "groq"
+    assert config.model == "openai/gpt-oss-120b"
+    assert config.temperature == 0.0
+    assert config.max_tokens == 1000
+
+
+def test_build_generation_config_normalizes_openai_and_model(monkeypatch):
+    monkeypatch.setenv("LLM_PROVIDER", " OpenAI ")
+    monkeypatch.setenv("OPENAI_MODEL", "unit-test-model")
+
+    config = api._build_generation_config()
+
+    assert config.provider == "openai"
+    assert config.model == "unit-test-model"
+
+
+def test_build_generation_config_rejects_unsupported_provider(monkeypatch):
+    monkeypatch.setenv("LLM_PROVIDER", "unsupported-provider")
+
+    with pytest.raises(ValueError, match="LLM_PROVIDER"):
+        api._build_generation_config()
+
+
+def test_build_llm_provider_passes_config_to_factory(monkeypatch):
+    monkeypatch.setenv("LLM_PROVIDER", "openai")
+    monkeypatch.setenv("OPENAI_MODEL", "unit-test-model")
+    marker = object()
+    received = {}
+
+    def fake_factory(**kwargs):
+        received.update(kwargs)
+        return marker
+
+    monkeypatch.setattr(api, "build_provider", fake_factory)
+
+    assert api._build_llm_provider() is marker
+    assert received == {
+        "provider": "openai",
+        "model": "unit-test-model",
+        "max_tokens": 1000,
+    }
+
+
+def test_build_llm_provider_rejects_unconfigured_provider(monkeypatch):
+    monkeypatch.setenv("LLM_PROVIDER", "groq")
+    monkeypatch.setattr(api, "build_provider", lambda **kwargs: None)
+
+    with pytest.raises(ValueError, match="not configured"):
+        api._build_llm_provider()

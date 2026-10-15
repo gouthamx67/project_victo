@@ -1,7 +1,6 @@
 from pathlib import Path
 
 import pandas as pd
-import pytest
 
 from src.ingest import ingest_and_validate
 from src.normalize import (
@@ -432,27 +431,26 @@ def test_country_mismatch_is_boolean():
     assert normalized.cases["country_mismatch"].dtype == bool
 
 
-@pytest.mark.skipif(
-    not (Path(__file__).resolve().parents[1] / "data" / "Bisoprolol_icsr_sample_1068rows (1).csv").exists(),
-    reason="Requires the local ignored challenge CSV for an exact-count regression.",
-)
-def test_bisoprolol_dataset_has_17_ambiguous_occurrence_countries():
-    from pathlib import Path
+def test_conflicting_countries_are_marked_ambiguous():
+    df = load_validated_dataframe()
 
-    from src.ingest import load_raw_csv
-    from src.normalize import normalize_dataset
+    first = df.iloc[[0]].copy()
+    second = first.copy()
 
-    csv_path = Path(
-        "data/Bisoprolol_icsr_sample_1068rows (1).csv"
-    )
-    data = normalize_dataset(load_raw_csv(csv_path))
+    first.loc[:, "safetyreportid"] = "900099"
+    first.loc[:, "occurcountry"] = "US"
+    first.loc[:, "receivedate"] = "20241227"
 
-    assert len(data.cases) == 1024
-    assert (
-        data.cases["occurcountry_status"].eq("ambiguous").sum()
-        == 17
-    )
-    assert (
-        data.cases["country_mismatch"].sum()
-        == 1
-    )
+    second.loc[:, "safetyreportid"] = "900099"
+    second.loc[:, "occurcountry"] = "GB"
+    second.loc[:, "receivedate"] = "20241228"
+
+    raw = pd.concat([first, second], ignore_index=True)
+    normalized = normalize_dataset(raw)
+
+    case = normalized.cases.loc[
+        normalized.cases["case_id"].eq("900099")
+    ].iloc[0]
+
+    assert case["occurcountry_status"] == "ambiguous"
+    assert pd.isna(case["occurcountry"])

@@ -352,6 +352,10 @@ def _render_final_narrative(
     )
 
 
+class DatasetInputError(ValueError):
+    """Uploaded dataset could not be parsed or failed validation."""
+
+
 def run_report_pipeline(
     csv_path: str | Path,
     config_path: str | Path,
@@ -380,16 +384,18 @@ def run_report_pipeline(
 
     from src.ingest import ingest_and_validate
 
-    dataframe, validation = ingest_and_validate(
-        csv_path
-    )
+    try:
+        dataframe, validation = ingest_and_validate(csv_path)
+    except ValueError as exc:
+        # Pandas CSV parser and decoding failures may also be ValueError
+        # subclasses. Translate failures at the input boundary only.
+        raise DatasetInputError(
+            "Uploaded CSV could not be parsed or validated."
+        ) from exc
 
     if not validation.is_valid:
-        errors = "; ".join(
-            validation.errors
-        )
-
-        raise ValueError(
+        errors = "; ".join(validation.errors)
+        raise DatasetInputError(
             f"Dataset validation failed: {errors}"
         )
 

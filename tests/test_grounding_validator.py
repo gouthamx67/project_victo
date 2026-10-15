@@ -73,7 +73,7 @@ def test_unsupported_number_is_invalid():
     )
 
 
-def test_approved_number_is_allowed():
+def test_approved_number_outside_slot_is_invalid():
     results = [
         make_result("case_count", 1024),
     ]
@@ -83,16 +83,58 @@ def test_approved_number_is_allowed():
         results,
     )
 
-    assert result.valid is True
+    assert result.valid is False
+    assert any(
+        issue.code == "unsupported_number"
+        for issue in result.issues
+    )
 
 
-def test_approved_percentage_is_allowed():
+def test_approved_percentage_outside_slot_is_invalid():
     results = [
         make_result("serious_case_percentage", 99.9),
     ]
 
     result = validate_grounding(
         "Serious cases represented 99.9% of cases.",
+        results,
+    )
+
+    assert result.valid is False
+    assert any(
+        issue.code == "unsupported_number"
+        for issue in result.issues
+    )
+
+
+def test_approved_number_misattributed_to_wrong_metric_is_invalid():
+    results = [
+        make_result("case_count", 1024),
+        make_result("serious_case_count", 12),
+    ]
+
+    # Both numbers occur in approved evidence, but their positions in this
+    # sentence reverse the metric associations. The validator must require
+    # slots instead of accepting globally approved numbers.
+    result = validate_grounding(
+        "There were 12 cases and 1024 serious cases.",
+        results,
+    )
+
+    assert result.valid is False
+    assert any(
+        issue.code == "unsupported_number"
+        for issue in result.issues
+    )
+
+
+def test_metric_slot_allows_deterministic_value_insertion():
+    results = [
+        make_result("case_count", 1024),
+    ]
+
+    result = validate_grounding(
+        "The dataset contained {case_count} cases.",
         results,
     )
 
@@ -221,12 +263,13 @@ def test_nested_metric_values_are_checked():
     ]
 
     assert validate_grounding(
-        "There were 3 fatal and 20 recovered outcomes.",
+        "The outcome summary is {outcomes}.",
         results,
     ).valid
 
     assert not validate_grounding(
-        "There were 3 fatal and 999 recovered outcomes.",
+        "The outcome summary is {outcomes}, including 3 fatal "
+        "and 999 recovered outcomes.",
         results,
     ).valid
 
@@ -451,3 +494,65 @@ def test_neutral_discussion_does_not_exempt_causal_claim_after_when():
 
     assert result.valid is False
     assert any(issue.code == "banned_claim" for issue in result.issues)
+
+
+def test_digits_inside_metric_slot_name_are_not_narrative_numbers():
+    from src.grounding_validator import _find_unsupported_numbers
+
+    assert _find_unsupported_numbers("Use {metric_2}.") == []
+
+
+def test_nested_and_unmatched_metric_braces_are_rejected():
+    results = [make_result("case_count", 1024)]
+    narratives = [
+        "The dataset contained {{case_count}} cases.",
+        "The dataset contained {case_count cases.",
+        "The dataset contained case_count} cases.",
+    ]
+
+    for narrative in narratives:
+        result = validate_grounding(narrative, results)
+        assert not result.valid, narrative
+        assert any(
+            issue.code == "invalid_metric_slot"
+            for issue in result.issues
+        ), narrative
+
+
+@pytest.mark.parametrize(
+    "narrative",
+    [
+        "The dataset contained one thousand cases.",
+        "Fifteen reactions were reported.",
+        "Twenty-five serious reports were logged.",
+    ],
+)
+def test_spelled_out_quantities_outside_slots_are_invalid(narrative):
+    results = [make_result("case_count", 1024)]
+
+    result = validate_grounding(narrative, results)
+
+    assert not result.valid
+    assert any(
+        issue.code == "unsupported_number"
+        for issue in result.issues
+    )
+
+
+@pytest.mark.parametrize(
+    "narrative",
+    [
+        "The dataset contained １２３ cases.",
+        "The dataset contained ١٢٣ cases.",
+    ],
+)
+def test_unicode_decimal_digits_outside_slots_are_invalid(narrative):
+    results = [make_result("case_count", 1024)]
+
+    result = validate_grounding(narrative, results)
+
+    assert not result.valid
+    assert any(
+        issue.code == "unsupported_number"
+        for issue in result.issues
+    )

@@ -79,7 +79,7 @@ Override the model with `GROQ_MODEL` / `OPENAI_MODEL`. With LLM off (the default
 
 ```bash
 python -m src.report_cli \
-  --csv "data/Bisoprolol_icsr_sample_1068rows (1).csv" \
+  --csv "path/to/input.csv" \
   --config configs/pader.yaml \
   --prompt prompts/sections/default.txt \
   --template prompts/report_template.html \
@@ -96,7 +96,7 @@ Narrative instructions live in `prompts/sections/default.txt`; the report scaffo
 - `DESIGN_DECISIONS.md` — the deterministic-vs-LLM boundary, normalization rules, and scope decisions.
 - `KNOWN_LIMITATIONS.md` — prototype scope and known constraints.
 - `configs/pader.yaml`, `configs/psur_lite.yaml` — report-type definitions (the second proves generalization).
-- `reports/` — example generated reports; `architecture.png` — system diagram.
+- `architecture.png` — system diagram. Generated reports are local artifacts and should not be committed.
 
 ## API (optional)
 ```bash

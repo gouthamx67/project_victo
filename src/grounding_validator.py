@@ -1,28 +1,42 @@
 from __future__ import annotations
 
-import math
 import re
 from dataclasses import dataclass
-from typing import Any
 
 from src.analysis_framework import AnalysisResult
 from src.metric_slots import (
     MetricSlotError,
+    SLOT_PATTERN,
     find_metric_slots,
     validate_metric_slots,
 )
 
 
-# Numeric literals intentionally include integers, decimals, and percentages.
-# Scientific notation is also handled.
-NUMBER_PATTERN = re.compile(
-    r"(?<![A-Za-z0-9_.-])"
-    r"-?(?:\d+(?:\.\d+)?|\.\d+)"
-    r"(?:[eE][+-]?\d+)?"
-    r"%?"
-    r"(?![A-Za-z0-9_.-])"
+
+_CARDINAL_WORD = (
+    r"(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|"
+    r"eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|"
+    r"eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|"
+    r"eighty|ninety|hundred|thousand|million|billion|trillion)"
 )
 
+_QUANTITY_MODIFIER = (
+    r"(?:serious|fatal|suspected|confirmed|reported|observed|"
+    r"additional|new|unique|distinct|overall|adverse|total)"
+)
+
+_QUANTITY_NOUN = (
+    r"(?:cases?|reactions?|reports?|patients?|events?|records?|rows?|"
+    r"subjects?|deaths?|outcomes?|occurrences?|instances?|participants?|"
+    r"exposures?|times|percentages?|samples?|doses?|seconds?|minutes?|"
+    r"hours?|days?|weeks?|months?|years?)"
+)
+
+SPELLED_OUT_QUANTITY_PATTERN = re.compile(
+    rf"\b{_CARDINAL_WORD}(?:[\s-]+(?:and[\s-]+)?{_CARDINAL_WORD})*"
+    rf"(?:\s+{_QUANTITY_MODIFIER})?\s+{_QUANTITY_NOUN}\b",
+    re.IGNORECASE,
+)
 
 # These phrases represent claims the current evidence model cannot establish.
 #
@@ -90,82 +104,18 @@ class GroundingValidationError(ValueError):
         self.issues = issues
 
 
-def _numeric_value(value: Any) -> list[float]:
-    """
-    Extract numeric values from an approved metric value.
+def _find_unsupported_numbers(text: str) -> list[str]:
+    """Find digits and common spelled-out quantities outside metric slots."""
+    text_without_slots = SLOT_PATTERN.sub("", text)
 
-    This is used only for comparison. It does not create new metrics.
-    """
-    if isinstance(value, bool):
-        return []
-
-    if isinstance(value, int | float):
-        number = float(value)
-
-        if math.isfinite(number):
-            return [number]
-
-        return []
-
-    if isinstance(value, dict):
-        numbers: list[float] = []
-
-        for item in value.values():
-            numbers.extend(_numeric_value(item))
-
-        return numbers
-
-    if isinstance(value, list):
-        numbers: list[float] = []
-
-        for item in value:
-            numbers.extend(_numeric_value(item))
-
-        return numbers
-
-    return []
-
-
-def _normalise_number(number_text: str) -> float:
-    return float(number_text.rstrip("%"))
-
-
-def _approved_numbers(
-    results: list[AnalysisResult],
-) -> set[float]:
-    numbers: set[float] = set()
-
-    for result in results:
-        numbers.update(_numeric_value(result.value))
-
-    return numbers
-
-
-def _find_unsupported_numbers(
-    text: str,
-    results: list[AnalysisResult],
-) -> list[str]:
-    """
-    Find numeric literals that do not occur in approved metric values.
-
-    Note that this intentionally checks values globally. CP13/CP15 can later
-    make this stricter by validating evidence at the section/metric level.
-    """
-    approved = _approved_numbers(results)
-    unsupported: list[str] = []
-
-    for match in NUMBER_PATTERN.finditer(text):
-        literal = match.group(0)
-
-        try:
-            number = _normalise_number(literal)
-        except ValueError:
-            unsupported.append(literal)
-            continue
-
-        if number not in approved:
-            unsupported.append(literal)
-
+    unsupported = [
+        match.group(0)
+        for match in re.finditer(r"\d+", text_without_slots)
+    ]
+    unsupported.extend(
+        match.group(0)
+        for match in SPELLED_OUT_QUANTITY_PATTERN.finditer(text_without_slots)
+    )
     return unsupported
 
 
@@ -261,10 +211,7 @@ def validate_grounding(
             )
         )
 
-    unsupported_numbers = _find_unsupported_numbers(
-        text,
-        results,
-    )
+    unsupported_numbers = _find_unsupported_numbers(text)
 
     if unsupported_numbers:
         unique_numbers = list(dict.fromkeys(unsupported_numbers))
@@ -273,7 +220,8 @@ def validate_grounding(
             GroundingIssue(
                 code="unsupported_number",
                 message=(
-                    "Narrative contains unsupported numeric values: "
+                    "Narrative contains numeric expressions outside approved "
+                    "metric slots: "
                     + ", ".join(unique_numbers)
                 ),
             )

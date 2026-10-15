@@ -36,7 +36,7 @@ report type.
 
 ## Validation
 - `tests/test_psur_lite_config.py` runs PSUR-lite through the full pipeline.
-- Example output: `reports/psur-lite-preview.html`.
+- Generated report HTML files are local artifacts and should not be committed.
 
 ## Open decisions
 - Which PSUR sections are mandatory vs optional per jurisdiction.
