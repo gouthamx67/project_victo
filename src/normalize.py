@@ -588,6 +588,26 @@ def normalize_cases(df: pd.DataFrame) -> pd.DataFrame:
     )
     records["sex_status"] = _status_from_counts(index, sex_counts)
 
+    # --- reporter qualification ---------------------------------------------
+    qualification_counts, qualification_first = _case_unique_summary(
+        working_ids,
+        _clean_string_series(working["primarysource_qualification"]),
+    )
+    qualification_counts = qualification_counts.reindex(
+        index,
+        fill_value=0,
+    )
+
+    records["reporter_qualification"] = (
+        qualification_first.reindex(index)
+        .where(qualification_counts.eq(1))
+        .str.lower()
+    )
+    records["reporter_qualification_status"] = _status_from_counts(
+        index,
+        qualification_counts,
+    )
+
     # --- age ---------------------------------------------------------------
     age = pd.to_numeric(
         working["patient_patientonsetage"],

@@ -42,8 +42,9 @@ report:
         - age_distribution
         - sex_distribution
         - country_distribution
+        - reporter_qualification_distribution
       ai: true
-      instructions: "Describe age, sex, and country/region distributions. Preserve unknown values. Country codes IE, RO, SA, HR, UA, and FI are normalized to country names; EU is represented as European Union (region). Do not infer missing demographics."
+      instructions: "Describe age, sex, country/region, and reporter qualification distributions. Preserve unknown values. Country codes IE, RO, SA, HR, UA, and FI are normalized to country names; EU is represented as European Union (region). Do not infer missing demographics."
       style:
         tone: neutral
         length: medium
@@ -58,7 +59,7 @@ report:
         - top_serious_reactions
         - reaction_outcome_distribution
       ai: true
-      instructions: "Describe reaction preferred terms, distinguishing reaction occurrences from distinct supporting cases. Include serious reactions where available. Do not infer causality, expectedness, or unavailable system organ class information."
+      instructions: "Describe reaction preferred terms, distinguishing reaction occurrences from distinct supporting cases. Include serious reactions where available. State that system organ class level analysis is unavailable because the dataset provides only MedDRA Preferred Terms. Do not infer causality or expectedness."
       style:
         tone: neutral
         length: medium

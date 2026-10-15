@@ -304,6 +304,63 @@ def calculate_country_distribution(
 
 
 @register_analysis(
+    metric_id="reporter_qualification_distribution",
+    population="case",
+    version=ANALYSIS_VERSION,
+)
+def calculate_reporter_qualification_distribution(
+    data: NormalizedData,
+) -> AnalysisResult:
+    """
+    Return case-level reporter qualification distribution.
+
+    Missing and ambiguous qualification values are represented
+    as unknown.
+    """
+
+    values: list[str] = []
+
+    for value in data.cases["reporter_qualification"].tolist():
+        if pd.isna(value):
+            values.append("unknown")
+            continue
+
+        text = str(value).strip()
+
+        if not text:
+            values.append("unknown")
+        else:
+            values.append(text.lower())
+
+    counts = Counter(values)
+
+    value = [
+        {
+            "reporter_qualification": qualification,
+            "count": int(count),
+        }
+        for qualification, count in sorted(
+            counts.items(),
+            key=lambda item: (-item[1], item[0]),
+        )
+    ]
+
+    return AnalysisResult(
+        metric_id="reporter_qualification_distribution",
+        value=value,
+        definition=(
+            "Distribution of normalized safety cases by the submitted "
+            "primary-source reporter qualification. Missing or ambiguous "
+            "values are classified as unknown."
+        ),
+        population="case",
+        unit="cases",
+        supporting_ids=_case_ids(data),
+        version=ANALYSIS_VERSION,
+    )
+
+
+@register_analysis(
     metric_id="history_of_actions",
     population="case",
     version=ANALYSIS_VERSION,

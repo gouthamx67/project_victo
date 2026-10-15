@@ -106,6 +106,17 @@ The normalized record is marked ambiguous and the value is left missing.
 
 This avoids introducing unsupported facts.
 
+### Decision: Country analyses use occurcountry
+
+The source supplies both `occurcountry` and `primarysource_reportercountry`.
+The reported country distribution uses `occurcountry`; the reporter country
+is normalized separately and cases where the two disagree are flagged
+(`country_mismatch`) instead of being silently resolved.
+
+Reporter qualification (`primarysource_qualification`) is normalized to a
+single case-level value using the same single-value-or-missing rule, and
+feeds the reporter qualification distribution metric.
+
 ### Decision: Aggregate conflicting seriousness flags using any-yes
 
 The seriousness criteria are independent flags.

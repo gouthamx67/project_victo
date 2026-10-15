@@ -9,6 +9,7 @@ from src.analyses.reporting import (
     calculate_age_distribution,
     calculate_country_distribution,
     calculate_history_of_actions,
+    calculate_reporter_qualification_distribution,
     calculate_reporting_period,
     calculate_sex_distribution,
 )
@@ -98,6 +99,23 @@ def test_country_distribution_retains_eu_region():
 
     assert rows
     assert sum(rows.values()) == len(data.cases)
+
+
+def test_reporter_qualification_distribution_is_case_level():
+    data = load_normalized_data()
+
+    result = calculate_reporter_qualification_distribution(data)
+
+    assert result.unit == "cases"
+    assert sum(row["count"] for row in result.value) == len(data.cases)
+
+    qualifications = {
+        row["reporter_qualification"]
+        for row in result.value
+    }
+
+    assert qualifications
+    assert all(value == value.lower() for value in qualifications)
 
 
 def test_history_of_actions_is_explicitly_none_provided():

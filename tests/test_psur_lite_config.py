@@ -48,6 +48,7 @@ def test_psur_lite_uses_existing_metrics() -> None:
         "age_distribution",
         "sex_distribution",
         "country_distribution",
+        "reporter_qualification_distribution",
         "reaction_count",
         "unique_reaction_count",
         "top_reactions",
