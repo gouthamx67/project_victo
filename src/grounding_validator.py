@@ -39,6 +39,9 @@ BANNED_CLAIM_PATTERNS: tuple[str, ...] = (
     r"\bsafety signal\b",
     r"\bsignal detected\b",
     r"\bcaused by\b",
+    r"\bcaused\b",
+    r"\bled to\b",
+    r"\bresulted in\b",
     r"\bcausally related\b",
     r"\bcausal relationship\b",
     r"\bexpected adverse reaction\b",
@@ -166,13 +169,30 @@ def _find_unsupported_numbers(
 def _find_banned_claims(text: str) -> list[str]:
     lowered = text.lower()
 
+    # This phrasing raises a causal question rather than asserting causation.
+    neutral_causal_discussion = re.compile(
+        r"\bdiscusses\s+whether\b[^.!?]*\bcaused\b"
+    )
+    neutral_spans = [
+        match.span()
+        for match in neutral_causal_discussion.finditer(lowered)
+    ]
+
     matches: list[str] = []
 
     for pattern in BANNED_CLAIM_PATTERNS:
-        match = re.search(pattern, lowered)
+        for match in re.finditer(pattern, lowered):
+            # Do not flag "caused" when it occurs inside the narrowly
+            # recognized neutral discussion phrase.
+            if (
+                match.group(0) == "caused"
+                and any(start <= match.start() and match.end() <= end
+                        for start, end in neutral_spans)
+            ):
+                continue
 
-        if match:
             matches.append(match.group(0))
+            break
 
     return matches
 

@@ -269,3 +269,50 @@ def test_neutral_monthly_description_is_not_flagged_as_interpretation():
         issue.code == "unsupported_interpretation"
         for issue in result.issues
     )
+
+
+def test_unsupported_causal_claim_using_caused_is_rejected():
+    results = [
+        make_result("case_count", 1024),
+    ]
+
+    result = validate_grounding(
+        "The drug caused the observed cases.",
+        results,
+    )
+
+    assert result.valid is False
+    assert any(
+        issue.code == "banned_claim"
+        for issue in result.issues
+    )
+
+
+def test_unsupported_causal_claim_using_led_to_is_rejected():
+    results = [
+        make_result("case_count", 1024),
+    ]
+
+    result = validate_grounding(
+        "The drug led to the observed cases.",
+        results,
+    )
+
+    assert result.valid is False
+    assert any(
+        issue.code == "banned_claim"
+        for issue in result.issues
+    )
+
+
+def test_neutral_causal_topic_without_causal_assertion_is_accepted():
+    results = [
+        make_result("case_count", 1024),
+    ]
+
+    result = validate_grounding(
+        "The report discusses whether the drug caused the observed cases.",
+        results,
+    )
+
+    assert result.valid is True

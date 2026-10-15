@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from src.analysis_framework import AnalysisResult
-from src.llm_contract import LLMNarrative
+from src.llm_contract import LLMNarrative, MetricContext, SectionContext
 from src.llm_provider import LLMProvider, generate_grounded_narrative
 
 
@@ -13,6 +13,27 @@ def _case_count_result() -> AnalysisResult:
         population="case",
         supporting_ids=["CASE-001", "CASE-002"],
         version="1.0.0",
+    )
+
+
+def _case_count_context() -> SectionContext:
+    return SectionContext(
+        report_id="pader",
+        report_version="1.0.0",
+        section_id="case_volume",
+        section_title="Case Volume",
+        instructions="Describe case volume.",
+        style={"tone": "formal", "length": "concise"},
+        metrics=[
+            MetricContext(
+                metric_id="case_count",
+                value=1024,
+                definition="Number of unique safety report cases.",
+                population="case",
+                supporting_ids=["CASE-001", "CASE-002"],
+                version="1.0.0",
+            )
+        ],
     )
 
 
@@ -39,7 +60,7 @@ def test_valid_llm_output_is_accepted() -> None:
 
     result = generate_grounded_narrative(
         provider=provider,
-        context={"section_id": "case_volume"},
+        context=_case_count_context(),
         prompt="Write a case-volume narrative.",
         results=[_case_count_result()],
         max_retries=1,
@@ -61,7 +82,7 @@ def test_unsupported_number_causes_retry() -> None:
 
     result = generate_grounded_narrative(
         provider=provider,
-        context={"section_id": "case_volume"},
+        context=_case_count_context(),
         prompt="Write a case-volume narrative.",
         results=[_case_count_result()],
         max_retries=1,
@@ -83,7 +104,7 @@ def test_banned_claim_causes_retry() -> None:
 
     result = generate_grounded_narrative(
         provider=provider,
-        context={"section_id": "case_volume"},
+        context=_case_count_context(),
         prompt="Write a case-volume narrative.",
         results=[_case_count_result()],
         max_retries=1,
@@ -93,7 +114,7 @@ def test_banned_claim_causes_retry() -> None:
     assert provider.calls == 2
 
 
-def test_exhausted_retries_return_last_llm_response() -> None:
+def test_exhausted_retries_use_deterministic_fallback() -> None:
     provider = SequenceProvider(
         [
             "There were 9999 cases.",
@@ -103,14 +124,13 @@ def test_exhausted_retries_return_last_llm_response() -> None:
 
     result = generate_grounded_narrative(
         provider=provider,
-        context={"section_id": "case_volume"},
+        context=_case_count_context(),
         prompt="Write a case-volume narrative.",
         results=[_case_count_result()],
         max_retries=1,
     )
 
-    # The low-level helper returns the final generated response after
-    # retries are exhausted. Deterministic fallback is handled by the
-    # higher-level pipeline.
-    assert result.text == "The product caused all reported events."
+    # Both LLM responses fail grounding validation, so the helper
+    # returns a deterministic fallback containing the approved metric slot.
+    assert result.text == "[NO-LLM DRAFT] Case Volume: {case_count}"
     assert provider.calls == 2
