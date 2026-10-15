@@ -229,3 +229,43 @@ def test_nested_metric_values_are_checked():
         "There were 3 fatal and 999 recovered outcomes.",
         results,
     ).valid
+
+def test_unsupported_typical_variability_claim_is_rejected():
+    results = [
+        make_result(
+            "monthly_review",
+            "No monthly deviations above the configured threshold.",
+        ),
+    ]
+
+    result = validate_grounding(
+        "The pattern reflects typical month-to-month variability "
+        "without any deterministic review flags.",
+        results,
+    )
+
+    assert result.valid is False
+    assert any(
+        issue.code == "unsupported_interpretation"
+        for issue in result.issues
+    )
+
+
+def test_neutral_monthly_description_is_not_flagged_as_interpretation():
+    results = [
+        make_result(
+            "monthly_review",
+            "No monthly deviations above the configured threshold.",
+        ),
+    ]
+
+    result = validate_grounding(
+        "The review found no monthly deviations above the configured threshold.",
+        results,
+    )
+
+    assert result.valid is True
+    assert not any(
+        issue.code == "unsupported_interpretation"
+        for issue in result.issues
+    )

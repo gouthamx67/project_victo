@@ -29,6 +29,12 @@ NUMBER_PATTERN = re.compile(
 # We deliberately keep this list conservative. This is not a general-purpose
 # semantic safety classifier. It is a deterministic guard against claims that
 # are explicitly outside this project's evidence boundary.
+# Interpretations that require evidence beyond descriptive counts.
+UNSUPPORTED_INTERPRETATION_PATTERNS: tuple[str, ...] = (
+    r"\btypical month-to-month variability\b",
+)
+
+
 BANNED_CLAIM_PATTERNS: tuple[str, ...] = (
     r"\bsafety signal\b",
     r"\bsignal detected\b",
@@ -171,6 +177,18 @@ def _find_banned_claims(text: str) -> list[str]:
     return matches
 
 
+def _find_unsupported_interpretations(text: str) -> list[str]:
+    """Find known interpretations that the current evidence model cannot support."""
+    matches: list[str] = []
+
+    for pattern in UNSUPPORTED_INTERPRETATION_PATTERNS:
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if match:
+            matches.append(match.group(0))
+
+    return matches
+
+
 def validate_grounding(
     text: str,
     results: list[AnalysisResult],
@@ -227,6 +245,20 @@ def validate_grounding(
                 message=(
                     "Narrative contains unsupported claim language: "
                     + ", ".join(unique_claims)
+                ),
+            )
+        )
+
+    unsupported_interpretations = _find_unsupported_interpretations(text)
+
+    if unsupported_interpretations:
+        issues.append(
+            GroundingIssue(
+                code="unsupported_interpretation",
+                message=(
+                    "Narrative contains interpretation language requiring "
+                    "additional evidence: "
+                    + ", ".join(dict.fromkeys(unsupported_interpretations))
                 ),
             )
         )
