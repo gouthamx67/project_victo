@@ -40,6 +40,9 @@ BANNED_CLAIM_PATTERNS: tuple[str, ...] = (
     r"\bsignal detected\b",
     r"\bcaused by\b",
     r"\bcaused\b",
+    r"\bcause\b",
+    r"\bcauses\b",
+    r"\bcausing\b",
     r"\bled to\b",
     r"\bresulted in\b",
     r"\bcausally related\b",
@@ -169,26 +172,48 @@ def _find_unsupported_numbers(
 def _find_banned_claims(text: str) -> list[str]:
     lowered = text.lower()
 
-    # This phrasing raises a causal question rather than asserting causation.
-    neutral_causal_discussion = re.compile(
-        r"\bdiscusses\s+whether\b[^.!?]*\bcaused\b"
+    # Narrow exceptions for explicit discussion or uncertainty.
+    # Non-greedy matching limits the exception to the first causal term.
+    neutral_causal_context = re.compile(
+        r"\b(?:discusses\s+whether|did\s+not\s+establish\s+that)\s+"
+        # Allow only a short subject phrase before the causal term.
+        # Do not cross predicates or common clause/conjunction markers.
+        r"(?:(?!\b(?:is|are|was|were|be|been|being|has|have|had|"
+        r"do|does|did|may|might|could|would|should|when|while|because|"
+        r"but|however|yet|whereas|although|and|or|not|if|unless)\b)"
+        r"[a-z][a-z-]*\s+){1,3}"
+        r"\b(?:caused(?:\s+by)?|cause|causes|causing|led\s+to|resulted\s+in|"
+        r"causally\s+related|causal\s+relationship)\b"
     )
     neutral_spans = [
         match.span()
-        for match in neutral_causal_discussion.finditer(lowered)
+        for match in neutral_causal_context.finditer(lowered)
     ]
+
+    causal_terms = {
+        "caused",
+        "caused by",
+        "cause",
+        "causes",
+        "causing",
+        "led to",
+        "resulted in",
+        "causally related",
+        "causal relationship",
+    }
 
     matches: list[str] = []
 
     for pattern in BANNED_CLAIM_PATTERNS:
         for match in re.finditer(pattern, lowered):
-            # Do not flag "caused" when it occurs inside the narrowly
-            # recognized neutral discussion phrase.
-            if (
-                match.group(0) == "caused"
-                and any(start <= match.start() and match.end() <= end
-                        for start, end in neutral_spans)
-            ):
+            is_neutral_mention = (
+                match.group(0) in causal_terms
+                and any(
+                    start <= match.start() and match.end() <= end
+                    for start, end in neutral_spans
+                )
+            )
+            if is_neutral_mention:
                 continue
 
             matches.append(match.group(0))

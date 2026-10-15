@@ -76,6 +76,106 @@ def build_cases() -> list[EvaluationCase]:
             ),
             expected_valid=False,
         ),
+        EvaluationCase(
+            case_id="valid_neutral_causal_discussion",
+            description="Neutral question about causality.",
+            narrative=(
+                "The report discusses whether the drug caused "
+                "the observed cases."
+            ),
+            expected_valid=True,
+        ),
+        EvaluationCase(
+            case_id="valid_causality_not_established",
+            description="States that causality was not established.",
+            narrative=(
+                "The report did not establish that the drug caused "
+                "the observed cases."
+            ),
+            expected_valid=True,
+        ),
+        EvaluationCase(
+            case_id="invalid_led_to_claim",
+            description="Unsupported causal claim using led to.",
+            narrative="The drug led to the observed cases.",
+            expected_valid=False,
+        ),
+        EvaluationCase(
+            case_id="invalid_negated_causal_claim",
+            description="Unsupported causal assertion phrased as a denial.",
+            narrative="The drug did not cause the observed cases.",
+            expected_valid=False,
+        ),
+        EvaluationCase(
+            case_id="invalid_unsupported_statistic",
+            description="Unsupported number in a narrative.",
+            narrative="The report recorded 9999 cases.",
+            expected_valid=False,
+        ),
+        EvaluationCase(
+            case_id="invalid_missing_required_metric",
+            description="Required evidence slot is absent.",
+            narrative="The report describes case volume.",
+            expected_valid=False,
+            required_metric_ids=("case_count",),
+        ),
+        EvaluationCase(
+            case_id="invalid_causal_claim_after_comma",
+            description="Neutral discussion must not shield a later causal claim.",
+            narrative=(
+                "The report discusses whether the treatment was appropriate, "
+                "but the drug caused the observed cases."
+            ),
+            expected_valid=False,
+        ),
+        EvaluationCase(
+            case_id="invalid_causal_claim_after_but",
+            description="A conjunction must end the neutral exception.",
+            narrative=(
+                "The report discusses whether the treatment was appropriate "
+                "but the drug caused the observed cases."
+            ),
+            expected_valid=False,
+        ),
+        EvaluationCase(
+            case_id="invalid_causal_claim_after_because",
+            description="A causal assertion after because is not exempt.",
+            narrative=(
+                "The report discusses whether the treatment was appropriate "
+                "because the drug caused the observed cases."
+            ),
+            expected_valid=False,
+        ),
+        EvaluationCase(
+            case_id="invalid_causes_claim",
+            description="Unsupported causal claim using causes.",
+            narrative="The drug causes the observed cases.",
+            expected_valid=False,
+        ),
+        EvaluationCase(
+            case_id="invalid_causing_claim",
+            description="Unsupported causal claim using causing.",
+            narrative="The drug is causing the observed cases.",
+            expected_valid=False,
+        ),
+        EvaluationCase(
+            case_id="invalid_causal_claim_after_colon",
+            description="A causal assertion after a colon is not exempt.",
+            narrative=(
+                "The report discusses whether the treatment was appropriate: "
+                "the drug caused the observed cases."
+            ),
+            expected_valid=False,
+        ),
+        EvaluationCase(
+            case_id="invalid_causal_claim_after_when",
+            description="A causal assertion after when is not exempt.",
+            narrative=(
+                "The report discusses whether the treatment was appropriate "
+                "when the drug caused the observed cases."
+            ),
+            expected_valid=False,
+        ),
     ]
 
 

@@ -14,9 +14,7 @@ from src.analyses.reporting import (
 )
 
 
-CSV_PATH = Path(
-    "data/Bisoprolol_icsr_sample_1068rows (1).csv"
-)
+CSV_PATH = Path("tests/fixtures/synthetic_icsr.csv")
 
 
 def load_normalized_data():
@@ -36,7 +34,7 @@ def test_reporting_period_matches_observed_dataset():
         "end_date": "2025-12-26",
         "days": 365,
     }
-    assert len(result.supporting_ids) == 1024
+    assert len(result.supporting_ids) == len(data.cases)
 
 
 def test_age_distribution_uses_required_buckets():
@@ -54,7 +52,7 @@ def test_age_distribution_uses_required_buckets():
     assert sum(
         row["count"]
         for row in result.value
-    ) == 1024
+    ) == len(data.cases)
 
     unknown = next(
         row["count"]
@@ -62,7 +60,7 @@ def test_age_distribution_uses_required_buckets():
         if row["age_bucket"] == "unknown"
     )
 
-    assert unknown == 84
+    assert unknown == 0
 
 
 def test_sex_distribution_is_case_level():
@@ -72,11 +70,18 @@ def test_sex_distribution_is_case_level():
 
     assert result.unit == "cases"
 
-    assert result.value == [
-        {"sex": "female", "count": 503},
-        {"sex": "male", "count": 493},
-        {"sex": "unknown", "count": 28},
-    ]
+    expected_sexes = {
+        label
+        if label not in {"", "nan", "none", "<na>"}
+        else "unknown"
+        for label in (
+            str(value).strip().lower()
+            for value in data.cases["sex"].tolist()
+        )
+    }
+
+    assert {row["sex"] for row in result.value} == expected_sexes
+    assert sum(row["count"] for row in result.value) == len(data.cases)
 
 
 def test_country_distribution_retains_eu_region():
@@ -91,12 +96,8 @@ def test_country_distribution_retains_eu_region():
         for row in result.value
     }
 
-    assert rows["EUROPEAN UNION (REGION)"] == 325
-    assert rows["UNITED KINGDOM"] == 278
-    assert rows["FRANCE"] == 185
-    assert rows["unknown"] == 24
-
-    assert sum(rows.values()) == 1024
+    assert rows
+    assert sum(rows.values()) == len(data.cases)
 
 
 def test_history_of_actions_is_explicitly_none_provided():

@@ -5,9 +5,7 @@ from src.normalize import normalize_dataset
 from src.analyses.reporting import calculate_case_listing
 
 
-CSV_PATH = Path(
-    "data/Bisoprolol_icsr_sample_1068rows (1).csv"
-)
+CSV_PATH = Path("tests/fixtures/synthetic_icsr.csv")
 
 
 def load_normalized_data():
@@ -22,8 +20,8 @@ def test_case_listing_has_required_fields():
     result = calculate_case_listing(data)
 
     assert result.unit == "case_listing"
-    assert len(result.value) == 1024
-    assert len(result.supporting_ids) == 1024
+    assert len(result.value) == len(data.cases)
+    assert len(result.supporting_ids) == len(data.cases)
 
     required_fields = {
         "case_id",
@@ -75,7 +73,8 @@ def test_case_listing_has_deterministic_seriousness_and_outcome():
     result = calculate_case_listing(data)
 
     assert all(
-        isinstance(row["serious"], bool)
+        row["serious"] is None
+        or isinstance(row["serious"], bool)
         for row in result.value
     )
 

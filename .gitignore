@@ -16,6 +16,7 @@ env/
 # Local dataset - DO NOT COMMIT
 data/
 *.csv
+!tests/fixtures/synthetic_icsr.csv
 
 # Model/API caches
 .cache/
@@ -32,3 +33,7 @@ outputs/
 Thumbs.db
 .vscode/
 .idea/
+
+# Locally generated report artifacts
+/report_output.html
+/reports/*.html

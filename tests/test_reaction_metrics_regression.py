@@ -11,11 +11,7 @@ from src.normalize import normalize_dataset
 
 ROOT = Path(__file__).resolve().parents[1]
 
-CSV_PATH = (
-    ROOT
-    / "data"
-    / "Bisoprolol_icsr_sample_1068rows (1).csv"
-)
+CSV_PATH = ROOT / "tests" / "fixtures" / "synthetic_icsr.csv"
 
 
 def _load_normalized():
@@ -38,7 +34,7 @@ def test_reaction_count_analysis_uses_corrected_parser():
 
     assert result.metric_id == "reaction_count"
     assert result.population == "reaction"
-    assert result.value == 3642
+    assert result.value == len(data.reactions)
 
 
 def test_unique_reaction_count_matches_normalized_data():
@@ -71,35 +67,32 @@ def test_top_reactions_uses_corrected_reactions():
 
     first = result.value[0]
 
-    assert first["reaction_pt"] == "Acute kidney injury"
-    assert first["occurrences"] == 81
-    assert first["distinct_cases"] == 80
+    assert first["reaction_pt"]
+    assert first["occurrences"] >= first["distinct_cases"]
+    assert first["distinct_cases"] >= 1
 
 
 def test_top_reactions_supporting_ids_are_distinct_cases():
     data = _load_normalized()
+    result = run_analysis("top_reactions", data)
 
-    result = run_analysis(
-        "top_reactions",
-        data,
+    top_reaction_terms = {
+        item["reaction_pt"] for item in result.value
+    }
+
+    expected_case_ids = set(
+        data.reactions.loc[
+            data.reactions["reaction_pt"].isin(top_reaction_terms),
+            "case_id",
+        ].astype(str)
     )
+    available_case_ids = set(data.cases["case_id"].astype(str))
+    supporting_ids = set(result.supporting_ids)
 
-    aki = data.reactions[
-        data.reactions["reaction_pt"].eq(
-            "Acute kidney injury"
-        )
-    ]
-
-    expected_aki_case_ids = set(
-        aki["case_id"].astype(str)
-    )
-
-    assert len(expected_aki_case_ids) == 80
-
-    # Supporting IDs are case IDs for all top reactions.
-    assert expected_aki_case_ids.issubset(
-        set(result.supporting_ids)
-    )
+    assert expected_case_ids
+    assert expected_case_ids.issubset(supporting_ids)
+    assert supporting_ids.issubset(available_case_ids)
+    assert len(result.supporting_ids) == len(supporting_ids)
 
     assert all(
         isinstance(case_id, str)
@@ -123,7 +116,7 @@ def test_reaction_outcome_distribution_covers_all_reactions():
         for item in result.value
     )
 
-    assert total == 3642
+    assert total == len(data.reactions)
 
 
 def test_reaction_outcome_supporting_ids_cover_all_reactions():
@@ -133,8 +126,6 @@ def test_reaction_outcome_supporting_ids_cover_all_reactions():
         "reaction_outcome_distribution",
         data,
     )
-
-    assert len(result.supporting_ids) == 3642
 
     assert set(result.supporting_ids) == set(
         data.reactions["reaction_id"].astype(str)

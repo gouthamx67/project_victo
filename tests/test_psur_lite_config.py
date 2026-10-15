@@ -95,9 +95,7 @@ def test_psur_lite_does_not_claim_full_regulatory_scope() -> None:
 def test_psur_lite_runs_through_same_pipeline() -> None:
     from src.report_pipeline import run_report_pipeline
 
-    dataset = Path(
-        "data/Bisoprolol_icsr_sample_1068rows (1).csv"
-    )
+    dataset = Path("tests/fixtures/synthetic_icsr.csv")
 
     prompt = Path(
         "prompts/sections/default.txt"
@@ -112,8 +110,8 @@ def test_psur_lite_runs_through_same_pipeline() -> None:
 
     assert result.config.report.id == "psur-lite"
 
-    assert len(result.normalized.cases) == 1024
-    assert len(result.normalized.reactions) == 3642
+    assert len(result.normalized.cases) == 6
+    assert len(result.normalized.reactions) == 7
 
     assert [
         section.section_id

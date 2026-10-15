@@ -316,3 +316,138 @@ def test_neutral_causal_topic_without_causal_assertion_is_accepted():
     )
 
     assert result.valid is True
+
+
+def test_neutral_causal_uncertainty_is_accepted():
+    results = [make_result("case_count", 1024)]
+
+    result = validate_grounding(
+        "The report did not establish that the drug caused the observed cases.",
+        results,
+    )
+
+    assert result.valid is True
+
+
+def test_unsupported_negated_causal_assertion_is_rejected():
+    results = [make_result("case_count", 1024)]
+
+    result = validate_grounding(
+        "The drug did not cause the observed cases.",
+        results,
+    )
+
+    assert result.valid is False
+    assert any(issue.code == "banned_claim" for issue in result.issues)
+
+
+def test_unsupported_statistic_is_rejected():
+    results = [make_result("case_count", 1024)]
+
+    result = validate_grounding(
+        "The report recorded 9999 cases.",
+        results,
+    )
+
+    assert result.valid is False
+
+
+def test_missing_required_metric_evidence_is_rejected():
+    results = [make_result("case_count", 1024)]
+
+    result = validate_grounding(
+        "The report describes case volume.",
+        results,
+        required_metric_ids=["case_count"],
+    )
+
+    assert result.valid is False
+
+
+def test_neutral_discussion_does_not_exempt_later_causal_assertion():
+    results = [make_result("case_count", 1024)]
+
+    result = validate_grounding(
+        "The report discusses whether the treatment was appropriate, "
+        "but the drug caused the observed cases.",
+        results,
+    )
+
+    assert result.valid is False
+    assert any(issue.code == "banned_claim" for issue in result.issues)
+
+
+def test_neutral_discussion_does_not_exempt_assertion_after_but():
+    results = [make_result("case_count", 1024)]
+
+    result = validate_grounding(
+        "The report discusses whether the treatment was appropriate "
+        "but the drug caused the observed cases.",
+        results,
+    )
+
+    assert result.valid is False
+    assert any(issue.code == "banned_claim" for issue in result.issues)
+
+
+def test_neutral_discussion_does_not_exempt_causal_claim_after_because():
+    results = [make_result("case_count", 1024)]
+
+    result = validate_grounding(
+        "The report discusses whether the treatment was appropriate "
+        "because the drug caused the observed cases.",
+        results,
+    )
+
+    assert result.valid is False
+    assert any(issue.code == "banned_claim" for issue in result.issues)
+
+
+def test_unsupported_causal_claim_using_causes_is_rejected():
+    results = [make_result("case_count", 1024)]
+
+    result = validate_grounding(
+        "The drug causes the observed cases.",
+        results,
+    )
+
+    assert result.valid is False
+    assert any(issue.code == "banned_claim" for issue in result.issues)
+
+
+def test_unsupported_causal_claim_using_causing_is_rejected():
+    results = [make_result("case_count", 1024)]
+
+    result = validate_grounding(
+        "The drug is causing the observed cases.",
+        results,
+    )
+
+    assert result.valid is False
+    assert any(issue.code == "banned_claim" for issue in result.issues)
+
+
+def test_neutral_discussion_does_not_exempt_causal_claim_after_colon():
+    results = [make_result("case_count", 1024)]
+
+    result = validate_grounding(
+        "The report discusses whether the treatment was appropriate: "
+        "the drug caused the observed cases.",
+        results,
+    )
+
+    assert result.valid is False
+    assert any(issue.code == "banned_claim" for issue in result.issues)
+
+
+def test_neutral_discussion_does_not_exempt_causal_claim_after_when():
+    results = [make_result("case_count", 1024)]
+
+    result = validate_grounding(
+        "The report discusses whether the treatment was appropriate "
+        "when the drug caused the observed cases.",
+        results,
+    )
+
+    assert result.valid is False
+    assert any(issue.code == "banned_claim" for issue in result.issues)

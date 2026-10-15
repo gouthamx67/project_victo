@@ -10,9 +10,7 @@ from src.report_pipeline import (
 from src.review import ReviewStatus
 
 
-DATASET = Path(
-    "data/Bisoprolol_icsr_sample_1068rows (1).csv"
-)
+DATASET = Path("tests/fixtures/synthetic_icsr.csv")
 
 CONFIG = Path(
     "configs/pader.yaml"

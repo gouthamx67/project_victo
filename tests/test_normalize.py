@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 from src.ingest import ingest_and_validate
 from src.normalize import (
@@ -10,7 +11,7 @@ from src.normalize import (
 )
 
 
-DATA_PATH = Path("data/Bisoprolol_icsr_sample_1068rows (1).csv")
+DATA_PATH = Path("tests/fixtures/synthetic_icsr.csv")
 
 
 def load_validated_dataframe() -> pd.DataFrame:
@@ -356,8 +357,8 @@ def test_normalize_dataset_produces_cases_and_reactions():
 
     normalized = normalize_dataset(df)
 
-    assert len(normalized.cases) == 1024
-    assert len(normalized.reactions) == 3642
+    assert len(normalized.cases) == 6
+    assert len(normalized.reactions) == 7
 
     assert normalized.cases["case_id"].is_unique
     assert normalized.reactions["case_id"].notna().all()
@@ -419,11 +420,8 @@ def test_case_normalization_preserves_multi_row_cases():
 
     normalized = normalize_dataset(df)
 
-    assert normalized.cases["source_row_count"].max() == 3
-    assert (
-        normalized.cases["source_row_count"].gt(1).sum()
-        == 41
-    )
+    assert normalized.cases["source_row_count"].max() == 2
+    assert normalized.cases["source_row_count"].gt(1).sum() == 1
 
 
 def test_country_mismatch_is_boolean():
@@ -434,6 +432,10 @@ def test_country_mismatch_is_boolean():
     assert normalized.cases["country_mismatch"].dtype == bool
 
 
+@pytest.mark.skipif(
+    not (Path(__file__).resolve().parents[1] / "data" / "Bisoprolol_icsr_sample_1068rows (1).csv").exists(),
+    reason="Requires the local ignored challenge CSV for an exact-count regression.",
+)
 def test_bisoprolol_dataset_has_17_ambiguous_occurrence_countries():
     from pathlib import Path
 

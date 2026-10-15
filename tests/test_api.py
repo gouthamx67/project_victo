@@ -21,7 +21,7 @@ from src.review import ReviewStatus
 client = TestClient(api.app)
 
 ROOT = Path(__file__).resolve().parents[1]
-DATASET = ROOT / "data" / "Bisoprolol_icsr_sample_1068rows (1).csv"
+DATASET = ROOT / "tests" / "fixtures" / "synthetic_icsr.csv"
 
 
 def _fake_result() -> ReportPipelineResult:

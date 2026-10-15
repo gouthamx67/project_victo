@@ -18,9 +18,7 @@ from src.review import (
 )
 
 
-DATASET = Path(
-    "data/Bisoprolol_icsr_sample_1068rows (1).csv"
-)
+DATASET = Path("tests/fixtures/synthetic_icsr.csv")
 
 CONFIG = Path(
     "configs/pader.yaml"

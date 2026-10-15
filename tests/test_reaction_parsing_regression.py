@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 from src.normalize import (
     EMBEDDED_COMMA_PTS,
@@ -13,10 +14,11 @@ from src.normalize import (
 
 ROOT = Path(__file__).resolve().parents[1]
 
-CSV_PATH = (
-    ROOT
-    / "data"
-    / "Bisoprolol_icsr_sample_1068rows (1).csv"
+CSV_PATH = ROOT / "data" / "Bisoprolol_icsr_sample_1068rows (1).csv"
+
+pytestmark = pytest.mark.skipif(
+    not CSV_PATH.exists(),
+    reason="Requires the local ignored challenge CSV for exact parser regressions.",
 )
 
 CASE_COLUMN = "safetyreportid"

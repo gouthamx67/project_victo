@@ -10,7 +10,7 @@ from src.run_artifacts import write_run_artifacts
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DATASET = ROOT / "data" / "Bisoprolol_icsr_sample_1068rows (1).csv"
+DATASET = ROOT / "tests" / "fixtures" / "synthetic_icsr.csv"
 CONFIG = ROOT / "configs" / "pader.yaml"
 PROMPT = ROOT / "prompts" / "sections" / "default.txt"
 TEMPLATE = ROOT / "prompts" / "report_template.html"

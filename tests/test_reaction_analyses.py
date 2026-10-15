@@ -28,9 +28,7 @@ from src.ingest import load_raw_csv
 from src.normalize import NormalizedData, normalize_dataset
 
 
-CSV_PATH = Path(
-    "data/Bisoprolol_icsr_sample_1068rows (1).csv"
-)
+CSV_PATH = Path("tests/fixtures/synthetic_icsr.csv")
 
 
 def make_outcome_data() -> NormalizedData:
